@@ -228,6 +228,50 @@ namespace {
         }
     }
 
+    ParseResult parseNumber(std::string_view str, size_t cursor, size_t cursorEnd)
+    {
+        // must be a number of some kind
+        const int sign = str[0] == '-' ? -1 : 1;
+        if (str[0] == '+' || str[0] == '-') {
+            cursor++;
+        }
+        const auto value = str.substr(cursor, cursorEnd - cursor);
+
+        const auto prefix = value.substr(0, 2);
+        if (prefix == "0x") {
+            const auto n = parseInteger(value.substr(2), 16);
+            if (!n) {
+                return makeError(ParseResult::Error::Type::CouldNotParseHexNumber, str, cursor);
+            }
+            return Node(sign * *n);
+        } else if (prefix == "0o") {
+            const auto n = parseInteger(value.substr(2), 8);
+            if (!n) {
+                return makeError(ParseResult::Error::Type::CouldNotParseOctalNumber, str, cursor);
+            }
+            return Node(sign * *n);
+        } else if (prefix == "0b") {
+            const auto n = parseInteger(value.substr(2), 2);
+            if (!n) {
+                return makeError(ParseResult::Error::Type::CouldNotParseBinaryNumber, str, cursor);
+            }
+            return Node(sign * *n);
+        }
+
+        // all digits
+        if (value.find_first_not_of("0123456789") == std::string::npos) {
+            const auto n = parseInteger(value, 10);
+            return Node(sign * *n);
+        }
+
+        const auto n = parseFloat(value);
+        if (!n) {
+            return makeError(ParseResult::Error::Type::CouldNotParseFloatNumber, str, cursor);
+        }
+        return Node(sign * *n);
+    }
+
+    ParseResult parseArray(std::string_view str, size_t& cursor);
     ParseResult parseDictionary(std::string_view str, size_t& cursor);
 
     ParseResult parseNode(std::string_view str, size_t& cursor)
@@ -240,8 +284,9 @@ namespace {
             std::cout << "Dict" << std::endl;
             return parseDictionary(str, cursor);
         } else if (str[cursor] == '[') {
+            cursor++;
             std::cout << "Array" << std::endl;
-            return makeError(ParseResult::Error::Type::NotImplemented, str, cursor);
+            return parseArray(str, cursor);
         } else if (str[cursor] == '"') {
             const auto s = parseString(str, cursor);
             if (!s) {
@@ -250,9 +295,11 @@ namespace {
             std::cout << "String: '" << *s << "'" << std::endl;
             return Node(*s);
         } else {
-            auto valueEnd = cursor;
-            while (valueEnd < str.size() && !isWhitespace(str[valueEnd]) && str[valueEnd] != ',') {
-                valueEnd++;
+            const auto valueChars
+                = "0123456789abcdefghijlmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.+-";
+            const auto valueEnd = str.find_first_not_of(valueChars, cursor);
+            if (valueEnd == std::string_view::npos) {
+                return makeError(ParseResult::Error::Type::NoValue, str, cursor);
             }
             const auto value = str.substr(cursor, valueEnd - cursor);
             std::cout << "Value: '" << value << "'" << std::endl;
@@ -267,52 +314,51 @@ namespace {
                 return Node(false);
             }
 
-            // must be a number of some kind
-            const int sign = value[0] == '-' ? -1 : 1;
-            if (value[0] == '+' || value[0] == '-') {
-                cursor++;
-            }
-
-            const auto prefix = value.substr(0, 2);
-            if (prefix == "0x") {
-                const auto n = parseInteger(value.substr(2), 16);
-                if (!n) {
-                    return makeError(ParseResult::Error::Type::CouldNotParseHexNumber, str, cursor);
-                }
-                cursor += value.size();
-                return Node(sign * *n);
-            } else if (prefix == "0o") {
-                const auto n = parseInteger(value.substr(2), 8);
-                if (!n) {
-                    return makeError(
-                        ParseResult::Error::Type::CouldNotParseOctalNumber, str, cursor);
-                }
-                cursor += value.size();
-                return Node(sign * *n);
-            } else if (prefix == "0b") {
-                const auto n = parseInteger(value.substr(2), 2);
-                if (!n) {
-                    return makeError(
-                        ParseResult::Error::Type::CouldNotParseBinaryNumber, str, cursor);
-                }
-                cursor += value.size();
-                return Node(sign * *n);
-            }
-
-            // all digits
-            if (value.find_first_not_of("0123456789") == std::string::npos) {
-                const auto n = parseInteger(value, 10);
-                cursor += value.size();
-                return Node(sign * *n);
-            }
-
-            const auto n = parseFloat(value);
-            if (!n) {
-                return makeError(ParseResult::Error::Type::CouldNotParseFloatNumber, str, cursor);
+            auto node = parseNumber(str, cursor, valueEnd);
+            if (!node) {
+                return node;
             }
             cursor += value.size();
-            return Node(sign * *n);
+            return node;
         }
+    }
+
+    bool skipSeparator(std::string_view str, size_t& cursor)
+    {
+        bool separatorFound = false;
+        while (cursor < str.size()) {
+            if (str[cursor] == ',' || str[cursor] == '\n') {
+                separatorFound = true;
+            } else if (!isWhitespace(str[cursor])) {
+                break;
+            }
+            cursor++;
+        }
+        return separatorFound;
+    }
+
+    ParseResult parseArray(std::string_view str, size_t& cursor)
+    {
+        Node::Array arr;
+        while (cursor < str.size()) {
+            auto value = parseNode(str, cursor);
+            if (!value) {
+                return value;
+            }
+            arr.emplace_back(std::make_unique<Node>(std::move(value.node())));
+
+            const auto separatorFound = skipSeparator(str, cursor);
+
+            if (str[cursor] == ']') {
+                cursor++; // skip ']'
+                break;
+            }
+
+            if (!separatorFound) {
+                return makeError(ParseResult::Error::Type::NoSeparator, str, cursor);
+            }
+        }
+        return Node(std::move(arr));
     }
 
     ParseResult parseDictionary(std::string_view str, size_t& cursor)
@@ -329,24 +375,11 @@ namespace {
             if (!value) {
                 return value;
             }
-
             dict.emplace_back(std::move(*key), std::make_unique<Node>(std::move(value.node())));
 
-            bool separatorFound = false;
-            bool dictFinished = false;
-            while (cursor < str.size()) {
-                if (str[cursor] == '}') {
-                    dictFinished = true;
-                    break;
-                } else if (str[cursor] == ',' || str[cursor] == '\n') {
-                    separatorFound = true;
-                } else if (!isWhitespace(str[cursor])) {
-                    break;
-                }
-                cursor++;
-            }
+            const auto separatorFound = skipSeparator(str, cursor);
 
-            if (dictFinished) {
+            if (str[cursor] == '}') {
                 cursor++; // skip '}'
                 break;
             }

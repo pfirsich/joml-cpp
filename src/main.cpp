@@ -5,6 +5,15 @@
 
 using namespace std::literals;
 
+/*
+ * TODO:
+ * - Comments
+ * - Handle unexpected end of files better
+ * - Escaping backslash in strings
+ * - Arbitrary byte sequences in strings
+ * - Trimming lines in multi line strings
+ */
+
 const auto doc = R"(
 key1: "value1"
 key2: "value2"
@@ -12,10 +21,13 @@ key2: true
 key2: false
 key2: 12
 key2: 1.24
+key2: 0xf
 dict: {
     a: 1
     b: 2
 }
+position: {x: 0, y: 1}
+values: [false, 1, "two", 3, 4.0]
 )"sv;
 
 const auto singleIndent = "    ";
@@ -71,6 +83,8 @@ int main()
         const auto err = res.error();
         std::cerr << "Error: " << err.string() << std::endl;
         std::cerr << joml::getContextString(doc, err.position) << std::endl;
+        return 1;
     }
     std::cout << toJson(res.node()) << std::endl;
+    return 0;
 }
