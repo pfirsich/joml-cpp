@@ -24,7 +24,10 @@ key2: 1.24
 key2: 0xf
 dict: {
     a: 1
-    b: 2
+    b: {
+        c: 10,
+        d: 11
+    }
 }
 position: {x: 0, y: 1}
 values: [false, 1, "two", 3, 4.0]

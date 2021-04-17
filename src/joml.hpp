@@ -83,6 +83,7 @@ public:
             CouldNotParseDecimalIntegerNumber,
             CouldNotParseFloatNumber,
             NoSeparator,
+            ExpectedDictClose,
             NotImplemented,
         };
 

@@ -37,6 +37,8 @@ std::string_view ParseResult::Error::asString(Type type)
         return "CouldNotParseFloatNumber";
     case ParseResult::Error::Type::NoSeparator:
         return "NoSeparator";
+    case ParseResult::Error::Type::ExpectedDictClose:
+        return "ExpectedDictClose";
     case ParseResult::Error::Type::NotImplemented:
         return "NotImplemented";
     default:
@@ -272,7 +274,7 @@ namespace {
     }
 
     ParseResult parseArray(std::string_view str, size_t& cursor);
-    ParseResult parseDictionary(std::string_view str, size_t& cursor);
+    ParseResult parseDictionary(std::string_view str, size_t& cursor, bool isRoot = false);
 
     ParseResult parseNode(std::string_view str, size_t& cursor)
     {
@@ -361,7 +363,7 @@ namespace {
         return Node(std::move(arr));
     }
 
-    ParseResult parseDictionary(std::string_view str, size_t& cursor)
+    ParseResult parseDictionary(std::string_view str, size_t& cursor, bool isRoot)
     {
         Node::Dictionary dict;
         while (cursor < str.size()) {
@@ -386,6 +388,11 @@ namespace {
 
             if (!separatorFound) {
                 return makeError(ParseResult::Error::Type::NoSeparator, str, cursor);
+            }
+
+            assert(cursor <= str.size());
+            if (cursor == str.size() && !isRoot) {
+                return makeError(ParseResult::Error::Type::ExpectedDictClose, str, cursor);
             }
         }
         return Node(std::move(dict));
@@ -423,7 +430,7 @@ std::string getContextString(std::string_view str, const Position& position)
 ParseResult parse(std::string_view str)
 {
     size_t cursor = 0;
-    return parseDictionary(str, cursor);
+    return parseDictionary(str, cursor, true);
 }
 
 } // namespace joml
