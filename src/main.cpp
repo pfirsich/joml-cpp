@@ -7,14 +7,16 @@ using namespace std::literals;
 
 /*
  * TODO:
+ * - CRLF newlines
  * - Comments
+ * - null
  * - Handle unexpected end of files better
- * - Escaping backslash in strings
- * - Arbitrary byte sequences in strings
+ * - Properly implement escape characters
+ * - \x escapes
+ * - \u and \U escapes
+ * - inf/nan
  * - Trimming lines in multi line strings
- * - CR & CRLF newlines
- * - Test cases for every branch
- * - Python test harness
+ * - Test cases for every branch and every part of the spec
  */
 
 std::string getIndent(size_t depth)
