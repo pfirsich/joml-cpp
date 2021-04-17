@@ -12,6 +12,9 @@ using namespace std::literals;
  * - Escaping backslash in strings
  * - Arbitrary byte sequences in strings
  * - Trimming lines in multi line strings
+ * - CR & CRLF newlines
+ * - Test cases for every branch
+ * - Python test harness
  */
 
 std::string getIndent(size_t depth)
@@ -52,205 +55,59 @@ std::string toJson(const joml::Node& node, size_t depth = 0)
     } else if (node.is<joml::Node::Float>()) {
         return std::to_string(node.as<joml::Node::Float>());
     } else if (node.is<joml::Node::String>()) {
+        // TODO: Make this emit \x for non-ascii (visible) characters
         return "\"" + node.as<joml::Node::String>() + "\"";
     } else {
-        return "UNIMPLEMENTED";
+        assert(false && "Invalid node type");
     }
 }
 
-struct ErrorTest {
-    std::string_view title;
-    std::string_view jomlSource;
-    joml::ParseResult::Error::Type errorType;
-};
-
-struct SuccessTest {
-    std::string_view title;
-    std::string_view jomlSource;
-    std::string_view jsonSource;
-};
-
-const std::vector<ErrorTest> errorTests {
-    {
-        "Missing separator at end",
-        "dict: {a: 1, b: 2, c: 3",
-        joml::ParseResult::Error::Type::NoSeparator,
-    },
-    {
-        "Missing separator in between",
-        "dict: {a: 1 b: 2, c: 3",
-        joml::ParseResult::Error::Type::NoSeparator,
-    },
-    {
-        "Non-terminated dict",
-        "dict: {a: 1, b: 2, c: 3,",
-        joml::ParseResult::Error::Type::ExpectedDictClose,
-    },
-};
-
-const std::vector<SuccessTest> successTests {
-    {
-        "Big test",
-        R"(
-key1: "value1"
-key2: "value2"
-key2: true
-key2: false
-key2: 12
-key2: 1.24
-key2: 0xf
-dict: {
-    a: 1
-    b: {
-        c: 10,
-        d: 11
-    }
-}
-position: {x: 0, y: 1}
-values: [false, 1, "two", 3, 4.0]
-)",
-        R"({
-    "key1": "value1",
-    "key2": "value2",
-    "key2": true,
-    "key2": false,
-    "key2": 12,
-    "key2": 1.240000,
-    "key2": 15,
-    "dict": {
-        "a": 1,
-        "b": {
-            "c": 10,
-            "d": 11
-        }
-    },
-    "position": {
-        "x": 0,
-        "y": 1
-    },
-    "values": [
-        false,
-        1,
-        "two",
-        3,
-        4.000000
-    ]
-})",
-    },
-};
-
-class TestSuite {
-public:
-    TestSuite(
-        const std::vector<ErrorTest>& errorTests, const std::vector<SuccessTest>& successTests)
-        : errorTests_(errorTests)
-        , successTests_(successTests)
-    {
-    }
-
-    void run(const ErrorTest& test)
-    {
-        title(test.title);
-        const auto res = joml::parse(test.jomlSource);
-        if (res) {
-            fail(test.title, "parse successful");
-        } else {
-            const auto err = res.error();
-            if (err.type != test.errorType) {
-                fail(test.title, "wrong error: " + err.string());
-                std::cerr << joml::getContextString(test.jomlSource, err.position) << std::endl;
-            } else {
-                pass();
-            }
-        }
-    }
-
-    void run(const SuccessTest& test)
-    {
-        title(test.title);
-        const auto res = joml::parse(test.jomlSource);
-        if (!res) {
-            const auto err = res.error();
-            fail(test.title, "parse error: " + err.string());
-            std::cerr << joml::getContextString(test.jomlSource, err.position) << std::endl;
-        }
-        const auto json = toJson(res.node());
-        if (json != test.jsonSource) {
-            fail(test.title, "wrong parse result");
-            std::cerr << json << std::endl;
-        } else {
-            pass();
-        }
-    }
-
-    void run()
-    {
-        for (const auto& test : errorTests_)
-            run(test);
-        for (const auto& test : successTests_)
-            run(test);
-    }
-
-    void run(std::string_view title)
-    {
-        for (const auto& test : errorTests_) {
-            if (test.title == title) {
-                run(test);
-                return;
-            }
-        }
-        for (const auto& test : successTests_) {
-            if (test.title == title) {
-                run(test);
-                return;
-            }
-        }
-        std::cerr << "Test '" << title << "' not found" << std::endl;
-        assert(false);
-    }
-
-    const std::vector<std::string>& getFailedTests() const
-    {
-        return failedTests_;
-    }
-
-    void printSummary() const
-    {
-        if (!failedTests_.empty()) {
-            std::cout << failedTests_.size() << " tests failed:" << std::endl;
-            for (const auto& title : failedTests_) {
-                std::cout << title << std::endl;
-            }
-        }
-    }
-
-private:
-    void title(std::string_view title) const
-    {
-        std::cout << "# " << title << ": ";
-    }
-
-    void pass() const
-    {
-        std::cout << "\x1b[32mPASS\x1b[0m" << std::endl;
-    }
-
-    void fail(std::string_view title, std::string_view message)
-    {
-        std::cout << "\x1b[31mFAIL\x1b[0m"
-                  << " (" << message << ")" << std::endl;
-        failedTests_.emplace_back(title);
-    }
-
-    std::vector<ErrorTest> errorTests_;
-    std::vector<SuccessTest> successTests_;
-    std::vector<std::string> failedTests_;
-};
-
-int main()
+std::optional<std::string> readFile(const std::string& path)
 {
-    TestSuite suite(errorTests, successTests);
-    suite.run();
-    suite.printSummary();
-    return suite.getFailedTests().size();
+    FILE* f = ::fopen(path.c_str(), "r");
+    if (!f) {
+        std::cerr << "Could not open file" << std::endl;
+        return std::nullopt;
+    }
+    ::fseek(f, 0, SEEK_END);
+    const auto size = ::ftell(f);
+    if (size < 0) {
+        std::cerr << "Could not get file size" << std::endl;
+        return std::nullopt;
+    }
+    ::fseek(f, 0, SEEK_SET);
+    std::string str(size, '\0');
+    const auto n = ::fread(str.data(), 1, size, f);
+    if (n < static_cast<size_t>(size)) {
+        std::cerr << "Could not read file" << std::endl;
+        std::cerr << "Read " << n << " of " << size << " characters" << std::endl;
+        return std::nullopt;
+    }
+    ::fclose(f);
+    return str;
+}
+
+int main(int argc, char** argv)
+{
+    const std::vector<std::string> args(argv + 1, argv + argc);
+    if (args.empty()) {
+        std::cerr << "Mandatory argument (JOML file) missing" << std::endl;
+        return 1;
+    }
+    const auto path = args[0];
+    const auto source = readFile(path);
+    if (!source) {
+        return 1;
+    }
+
+    const auto res = joml::parse(*source);
+    if (!res) {
+        const auto err = res.error();
+        std::cerr << "Error parsing JOML file: " << err.string() << std::endl;
+        std::cerr << joml::getContextString(*source, err.position) << std::endl;
+        return 2;
+    }
+
+    std::cout << toJson(res.node()) << std::endl;
+    return 0;
 }
