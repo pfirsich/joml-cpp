@@ -11,6 +11,10 @@
 
 #include "joml.hpp"
 
+#define CONTEXT getContextString(str, getPosition(str, cursor))
+//#define DEBUG std::cout << __FUNCTION__ << '\n' << CONTEXT << std::endl;
+#define DEBUG
+
 namespace joml {
 std::string_view ParseResult::Error::asString(Type type)
 {
@@ -147,6 +151,7 @@ namespace {
 
     std::optional<std::string> parseString(std::string_view str, size_t& cursor)
     {
+        DEBUG;
         assert(str[cursor] == '"');
         const auto start = cursor + 1;
         while (cursor < str.size()) {
@@ -162,21 +167,19 @@ namespace {
 
     std::optional<std::string> parseKey(std::string_view str, size_t& cursor)
     {
+        DEBUG;
         skipWhitespace(str, cursor);
         if (cursor == str.size()) {
-            std::cout << "parseKey: cursor at end" << std::endl;
             return std::nullopt;
         }
         size_t newCursor = cursor;
         if (str[newCursor] == '"') {
             const auto s = parseString(str, newCursor);
             if (!s) {
-                std::cout << "Could not parse string" << std::endl;
                 return std::nullopt;
             }
             skipWhitespace(str, newCursor);
             if (str[newCursor] != ':') {
-                std::cout << "No colon after key" << std::endl;
                 return std::nullopt;
             }
             newCursor++;
@@ -185,11 +188,13 @@ namespace {
             while (str[newCursor] != ':') {
                 newCursor++;
                 if (newCursor >= str.size()) {
-                    std::cout << "Could not find ':'" << std::endl;
                     return std::nullopt;
                 }
             }
             const auto key = str.substr(cursor, newCursor - cursor);
+            if (key.empty()) {
+                return std::nullopt;
+            }
             newCursor++; // skip ':'
             cursor = newCursor;
             return std::string(key);
@@ -232,6 +237,7 @@ namespace {
 
     ParseResult parseNumber(std::string_view str, size_t cursor, size_t cursorEnd)
     {
+        DEBUG;
         // must be a number of some kind
         const int sign = str[0] == '-' ? -1 : 1;
         if (str[0] == '+' || str[0] == '-') {
@@ -278,40 +284,38 @@ namespace {
 
     ParseResult parseNode(std::string_view str, size_t& cursor)
     {
+        DEBUG;
         skipWhitespace(str, cursor);
         if (cursor == str.size())
             return makeError(ParseResult::Error::Type::NoValue, str, cursor);
         if (str[cursor] == '{') {
             cursor++;
-            std::cout << "Dict" << std::endl;
             return parseDictionary(str, cursor);
         } else if (str[cursor] == '[') {
             cursor++;
-            std::cout << "Array" << std::endl;
             return parseArray(str, cursor);
         } else if (str[cursor] == '"') {
             const auto s = parseString(str, cursor);
             if (!s) {
                 return makeError(ParseResult::Error::Type::CouldNotParseString, str, cursor);
             }
-            std::cout << "String: '" << *s << "'" << std::endl;
             return Node(*s);
         } else {
             const auto valueChars
                 = "0123456789abcdefghijlmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.+-";
-            const auto valueEnd = str.find_first_not_of(valueChars, cursor);
+            auto valueEnd = str.find_first_not_of(valueChars, cursor);
             if (valueEnd == std::string_view::npos) {
-                return makeError(ParseResult::Error::Type::NoValue, str, cursor);
+                valueEnd = str.size();
             }
             const auto value = str.substr(cursor, valueEnd - cursor);
-            std::cout << "Value: '" << value << "'" << std::endl;
+            if (value.empty()) {
+                return makeError(ParseResult::Error::Type::NoValue, str, cursor);
+            }
 
             if (value == "true") {
-                std::cout << "true" << std::endl;
                 cursor += value.size();
                 return Node(true);
             } else if (value == "false") {
-                std::cout << "false" << std::endl;
                 cursor += value.size();
                 return Node(false);
             }
@@ -341,6 +345,7 @@ namespace {
 
     ParseResult parseArray(std::string_view str, size_t& cursor)
     {
+        DEBUG;
         Node::Array arr;
         while (cursor < str.size()) {
             auto value = parseNode(str, cursor);
@@ -365,13 +370,13 @@ namespace {
 
     ParseResult parseDictionary(std::string_view str, size_t& cursor, bool isRoot)
     {
+        DEBUG;
         Node::Dictionary dict;
         while (cursor < str.size()) {
             const auto key = parseKey(str, cursor);
             if (!key) {
                 return makeError(ParseResult::Error::Type::InvalidKey, str, cursor);
             }
-            std::cout << "Key: '" << *key << "'" << std::endl;
 
             auto value = parseNode(str, cursor);
             if (!value) {
@@ -417,8 +422,9 @@ std::string getContextString(std::string_view str, const Position& position)
     for (int i = startLine; i <= endLine; ++i) {
         const auto idx = i - 1;
         const auto start = lineStarts[idx];
-        const auto end = i < numLines ? lineStarts[idx + 1] : str.size();
+        const auto end = i < numLines ? lineStarts[idx + 1] - 1 : str.size();
         ret.append(str.substr(start, end - start));
+        ret.append("\n");
         if (i == static_cast<int>(position.line)) {
             ret.append(position.column - 1, ' ');
             ret.append("^\n");
