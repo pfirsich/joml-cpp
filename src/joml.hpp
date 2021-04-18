@@ -32,6 +32,8 @@ namespace joml {
 
 class Node {
 public:
+    struct Null {
+    };
     using String = std::string;
     using Bool = bool;
     using Integer = int64_t;
@@ -60,7 +62,7 @@ public:
     }
 
 private:
-    std::variant<String, Bool, Integer, Float, Array, Dictionary> data_;
+    std::variant<Null, String, Bool, Integer, Float, Array, Dictionary> data_;
 };
 
 struct Position {

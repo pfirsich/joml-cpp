@@ -8,7 +8,6 @@ using namespace std::literals;
 /*
  * TODO:
  * - Comments
- * - null
  * - Handle unexpected end of files better
  * - Properly implement escape characters
  * - \x escapes
@@ -49,6 +48,8 @@ std::string toJson(const joml::Node& node, size_t depth = 0)
         }
         ret.append(getIndent(depth) + "]");
         return ret;
+    } else if (node.is<joml::Node::Null>()) {
+        return "null";
     } else if (node.is<joml::Node::Bool>()) {
         return node.as<joml::Node::Bool>() ? "true" : "false";
     } else if (node.is<joml::Node::Integer>()) {

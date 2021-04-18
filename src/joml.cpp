@@ -312,7 +312,10 @@ namespace {
                 return makeError(ParseResult::Error::Type::NoValue, str, cursor);
             }
 
-            if (value == "true") {
+            if (value == "null") {
+                cursor += value.size();
+                return Node(Node::Null {});
+            } else if (value == "true") {
                 cursor += value.size();
                 return Node(true);
             } else if (value == "false") {
