@@ -84,6 +84,7 @@ public:
             CouldNotParseBinaryNumber,
             CouldNotParseDecimalIntegerNumber,
             CouldNotParseFloatNumber,
+            InvalidValue,
             NoSeparator,
             ExpectedDictClose,
             NotImplemented,

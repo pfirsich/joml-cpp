@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cmath>
 #include <iostream>
 
 #include "joml.hpp"
@@ -55,7 +56,13 @@ std::string toJson(const joml::Node& node, size_t depth = 0)
     } else if (node.is<joml::Node::Integer>()) {
         return std::to_string(node.as<joml::Node::Integer>());
     } else if (node.is<joml::Node::Float>()) {
-        return std::to_string(node.as<joml::Node::Float>());
+        const auto f = node.as<joml::Node::Float>();
+        if (std::isnan(f)) {
+            return "NaN";
+        } else if (std::isinf(f)) {
+            return std::signbit(f) ? "-Infinity" : "Infinity";
+        }
+        return std::to_string(f);
     } else if (node.is<joml::Node::String>()) {
         // TODO: Make this emit \x for non-ascii (visible) characters
         return "\"" + node.as<joml::Node::String>() + "\"";

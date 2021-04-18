@@ -1,5 +1,7 @@
 #include <cassert>
+#include <cmath>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -39,6 +41,8 @@ std::string_view ParseResult::Error::asString(Type type)
         return "CouldNotParseDecimalIntegerNumber";
     case ParseResult::Error::Type::CouldNotParseFloatNumber:
         return "CouldNotParseFloatNumber";
+    case ParseResult::Error::Type::InvalidValue:
+        return "InvalidValue";
     case ParseResult::Error::Type::NoSeparator:
         return "NoSeparator";
     case ParseResult::Error::Type::ExpectedDictClose:
@@ -106,6 +110,20 @@ namespace {
         if ((ch & 0b11100000) == 0b11000000)
             return 2;
         return 1;
+    }
+
+    // quiet nan with arg = ""
+    template <typename T>
+    T nan()
+    {
+        constexpr auto isFloat = std::is_same_v<T, float>;
+        constexpr auto isDouble = std::is_same_v<T, double>;
+        static_assert(isFloat || isDouble);
+        if constexpr (isFloat) {
+            return std::nanf("");
+        } else if constexpr (isDouble) {
+            return std::nan("");
+        }
     }
 
     std::string_view readCodePoint(std::string_view str, size_t& cursor)
@@ -245,6 +263,12 @@ namespace {
         }
         const auto value = str.substr(cursor, cursorEnd - cursor);
 
+        if (value == "inf") {
+            return Node(sign * std::numeric_limits<Node::Float>::infinity());
+        } else if (value == "nan") {
+            return nan<Node::Float>();
+        }
+
         const auto prefix = value.substr(0, 2);
         if (prefix == "0x") {
             const auto n = parseInteger(value.substr(2), 16);
@@ -269,14 +293,22 @@ namespace {
         // all digits
         if (value.find_first_not_of("0123456789") == std::string::npos) {
             const auto n = parseInteger(value, 10);
+            if (!n) {
+                return makeError(
+                    ParseResult::Error::Type::CouldNotParseDecimalIntegerNumber, str, cursor);
+            }
             return Node(sign * *n);
         }
 
-        const auto n = parseFloat(value);
-        if (!n) {
-            return makeError(ParseResult::Error::Type::CouldNotParseFloatNumber, str, cursor);
+        if (value.find_first_not_of("0123456789.eE+-") == std::string::npos) {
+            const auto n = parseFloat(value);
+            if (!n) {
+                return makeError(ParseResult::Error::Type::CouldNotParseFloatNumber, str, cursor);
+            }
+            return Node(sign * *n);
         }
-        return Node(sign * *n);
+
+        return makeError(ParseResult::Error::Type::InvalidValue, str, cursor);
     }
 
     ParseResult parseArray(std::string_view str, size_t& cursor);
