@@ -10,10 +10,7 @@ using namespace std::literals;
  * TODO:
  * - Comments
  * - Handle unexpected end of files better
- * - Properly implement escape characters
- * - \x escapes
- * - \u and \U escapes
- * - inf/nan
+ * - Refactor: Introduce result types and replace a bunch of optionals to propagate errors better
  * - Trimming lines in multi line strings
  * - Test cases for every branch and every part of the spec
  */
@@ -24,6 +21,63 @@ std::string getIndent(size_t depth)
     for (size_t i = 0; i < depth; ++i)
         ret.append("    ");
     return ret;
+}
+
+std::optional<std::string> escape(std::string_view str)
+{
+    std::string escaped;
+    escaped.reserve(str.size());
+    for (size_t i = 0; i < str.size(); ++i) {
+        const auto c = str[i];
+        switch (c) {
+        case '\\':
+            escaped.append("\\\\");
+            break;
+        case '"':
+            escaped.append("\\\"");
+            break;
+        case '\b':
+            escaped.append("\\b");
+            break;
+        case '\f':
+            escaped.append("\\f");
+            break;
+        case '\n':
+            escaped.append("\\n");
+            break;
+        case '\r':
+            escaped.append("\\r");
+            break;
+        case '\t':
+            escaped.append("\\t");
+            break;
+        default:
+            if (c < 0x00 || (c >= 0x20 && c != 0x7f)) {
+                escaped.append(1, c);
+            } else {
+                const auto codePointStr = joml::utf8::readCodePoint(str, i);
+                const auto codePoint = joml::utf8::decode(codePointStr);
+                if (!codePoint) {
+                    return std::nullopt;
+                }
+
+                escaped.append("\\u");
+                const size_t numDigits = 4;
+
+                static constexpr std::array<char, 16> hexDigits { '0', '1', '2', '3', '4', '5', '6',
+                    '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
+                for (size_t i = 0; i < numDigits; ++i) {
+                    const auto shift = (numDigits - i - 1) * 4;
+                    escaped.append(1, hexDigits[(*codePoint >> shift) & 0xf]);
+                }
+
+                // readCodePoint has already advanced past the code point,
+                // so we need to compensate for the ++i of the for loop
+                i--;
+            }
+        }
+    }
+    return escaped;
 }
 
 std::string toJson(const joml::Node& node, size_t depth = 0)
@@ -64,8 +118,13 @@ std::string toJson(const joml::Node& node, size_t depth = 0)
         }
         return std::to_string(f);
     } else if (node.is<joml::Node::String>()) {
-        // TODO: Make this emit \x for non-ascii (visible) characters
-        return "\"" + node.as<joml::Node::String>() + "\"";
+        const auto& str = node.as<joml::Node::String>();
+        const auto escaped = escape(str);
+        if (!escaped) {
+            std::cerr << "Could not escape string: '" << str << "'" << std::endl;
+            std::exit(1);
+        }
+        return "\"" + *escaped + "\"";
     } else {
         assert(false && "Invalid node type");
     }

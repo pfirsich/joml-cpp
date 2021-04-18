@@ -1,34 +1,28 @@
 #include <memory>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
 
-/*extern "C" {
-typedef struct joml_file joml_file;
-typedef struct joml_node joml_node;
-
-typedef enum {
-    joml_node_type_string,
-    joml_node_type_integer,
-    joml_node_type_float,
-    joml_node_type_array,
-    joml_node_type_dictionary,
-} joml_node_type;
-
-void joml_parse(joml_file* file, const char* buffer, size_t size);
-const joml_node* joml_root_node(const joml_file* file);
-joml_node_type joml_node_type(const joml_node* node);
-const char* joml_string(const joml_node* node);
-int64_t joml_integer(const joml_node* node);
-double joml_float(const joml_node* node);
-size_t joml_array_size(const joml_node* node);
-}*/
-
 namespace joml {
+
+namespace utf8 {
+    constexpr auto b4CodeUnitsLeader = 0b11110'000;
+    constexpr auto b3CodeUnitsLeader = 0b1110'0000;
+    constexpr auto b2CodeUnitsLeader = 0b110'00000;
+    constexpr auto bContinuationByte = 0b10'000000;
+
+    constexpr bool is4CodeUnitLeader(char c);
+    constexpr bool is2CodeUnitLeader(char c);
+    constexpr bool is3CodeUnitLeader(char c);
+    constexpr bool isContinuationByte(char c);
+    constexpr size_t getCodePointLength(char firstCodeUnit);
+    std::optional<std::string> encode(uint32_t codePoint);
+    std::optional<uint32_t> decode(std::string_view str);
+    std::string_view readCodePoint(std::string_view str, size_t& cursor);
+}
 
 class Node {
 public:
@@ -87,6 +81,7 @@ public:
             InvalidValue,
             NoSeparator,
             ExpectedDictClose,
+            InvalidEscape,
             NotImplemented,
         };
 

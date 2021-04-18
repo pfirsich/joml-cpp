@@ -2,14 +2,6 @@
 #include <cmath>
 #include <iostream>
 #include <limits>
-#include <memory>
-#include <optional>
-#include <sstream>
-#include <string>
-#include <string_view>
-#include <utility>
-#include <variant>
-#include <vector>
 
 #include "joml.hpp"
 
@@ -18,6 +10,122 @@
 #define DEBUG
 
 namespace joml {
+namespace utf8 {
+    constexpr bool is4CodeUnitLeader(char c)
+    {
+        return (c & 0b11111'000) == b4CodeUnitsLeader;
+    }
+
+    constexpr bool is3CodeUnitLeader(char c)
+    {
+        return (c & 0b1111'0000) == b3CodeUnitsLeader;
+    }
+
+    constexpr bool is2CodeUnitLeader(char c)
+    {
+        return (c & 0b111'00000) == b2CodeUnitsLeader;
+    }
+
+    constexpr bool isContinuationByte(char c)
+    {
+        return (c & 0b11'000000) == bContinuationByte;
+    }
+
+    constexpr size_t getCodePointLength(char firstCodeUnit)
+    {
+        if (is4CodeUnitLeader(firstCodeUnit))
+            return 4;
+        if (is3CodeUnitLeader(firstCodeUnit))
+            return 3;
+        if (is2CodeUnitLeader(firstCodeUnit))
+            return 2;
+        return 1;
+    }
+
+    std::string_view readCodePoint(std::string_view str, size_t& cursor)
+    {
+        const auto start = cursor;
+        const auto num = getCodePointLength(str[start]);
+        for (size_t i = 1; i < num; ++i) {
+            // not a valid continuation byte => just end the sequence here, excluding continuation
+            if (!isContinuationByte(str[start + i])) {
+                cursor += i;
+                return std::string_view(str.data() + start, i);
+            }
+        }
+        cursor += num;
+        return std::string_view(str.data() + start, num);
+    }
+
+    std::optional<std::string> encode(uint32_t codePoint)
+    {
+        auto c = [](int n) { return static_cast<char>(n); };
+        if (codePoint <= 0x7f) {
+            return std::string(1, static_cast<char>(codePoint));
+        } else if (codePoint <= 0x7ff) {
+            char buf[2] = {
+                c(b2CodeUnitsLeader | ((0b11111'000000 & codePoint) >> 6)),
+                c(bContinuationByte | ((0b00000'111111 & codePoint) >> 0)),
+            };
+            return std::string(buf, 2);
+        } else if (codePoint <= 0xffff) {
+            char buf[3] = {
+                c(b3CodeUnitsLeader | ((0b1111'000000'000000 & codePoint) >> 12)),
+                c(bContinuationByte | ((0b0000'111111'000000 & codePoint) >> 6)),
+                c(bContinuationByte | ((0b0000'000000'111111 & codePoint) >> 0)),
+            };
+            return std::string(buf, 3);
+        } else if (codePoint <= 0x1fffff) {
+            char buf[4] = {
+                c(b4CodeUnitsLeader | ((0b111'000000'000000'000000 & codePoint) >> 18)),
+                c(bContinuationByte | ((0b000'111111'000000'000000 & codePoint) >> 12)),
+                c(bContinuationByte | ((0b000'000000'111111'000000 & codePoint) >> 6)),
+                c(bContinuationByte | ((0b000'000000'000000'111111 & codePoint) >> 0)),
+            };
+            return std::string(buf, 4);
+        } else {
+            return std::nullopt;
+        }
+    }
+
+    std::optional<uint32_t> decode(std::string_view str)
+    {
+        auto contBits = [](char ch) { return ch & 0b00'111111; };
+        switch (str.size()) {
+        case 1:
+            if (str[0] & 0b1'0000000) {
+                return std::nullopt;
+            }
+            return static_cast<uint32_t>(str[0]);
+            break;
+        case 2:
+            if (!is2CodeUnitLeader(str[0]) || !isContinuationByte(str[1])) {
+                return std::nullopt;
+            }
+            return static_cast<uint32_t>(((str[0] & 0b000'11111) << 6) | contBits(str[1]));
+            break;
+        case 3:
+            if (!is3CodeUnitLeader(str[0]) || !isContinuationByte(str[1])
+                || !isContinuationByte(str[2])) {
+                return std::nullopt;
+            }
+            return static_cast<uint32_t>(
+                ((str[0] & 0b0000'1111) << 12) | (contBits(str[1]) << 6) | contBits(str[2]));
+            break;
+        case 4:
+            if (!is4CodeUnitLeader(str[0]) || !isContinuationByte(str[1])
+                || !isContinuationByte(str[2]) || !isContinuationByte(str[3])) {
+                return std::nullopt;
+            }
+            return static_cast<uint32_t>(((str[0] & 0b00000'111) << 18) | (contBits(str[1]) << 12)
+                | (contBits(str[2]) << 6) | contBits(str[3]));
+            break;
+        default:
+            return std::nullopt;
+        }
+    }
+}
+
 std::string_view ParseResult::Error::asString(Type type)
 {
     switch (type) {
@@ -56,10 +164,8 @@ std::string_view ParseResult::Error::asString(Type type)
 
 std::string ParseResult::Error::string() const
 {
-    std::stringstream ss;
-    ss << asString(type);
-    ss << " at " << position.line << ":" << position.column;
-    return ss.str();
+    return std::string(asString(type)) + " at " + std::to_string(position.line) + ":"
+        + std::to_string(position.column);
 }
 
 ParseResult::operator bool() const
@@ -101,17 +207,6 @@ namespace {
         return cursor - start;
     }
 
-    size_t getCodePointLength(char ch)
-    {
-        if ((ch & 0b11111000) == 0b11110000)
-            return 4;
-        if ((ch & 0b11110000) == 0b11100000)
-            return 3;
-        if ((ch & 0b11100000) == 0b11000000)
-            return 2;
-        return 1;
-    }
-
     // quiet nan with arg = ""
     template <typename T>
     T nan()
@@ -124,22 +219,6 @@ namespace {
         } else if constexpr (isDouble) {
             return std::nan("");
         }
-    }
-
-    std::string_view readCodePoint(std::string_view str, size_t& cursor)
-    {
-        const auto num = getCodePointLength(str[cursor]);
-        if (num == 1) {
-            cursor++;
-            return std::string_view(str.data() + cursor, 1);
-        }
-        for (size_t i = 1; i < num; ++i) {
-            // not a valid continuation byte => just end the sequence here
-            if ((str[cursor + i] & 0b11000000) != 0b10000000)
-                return std::string_view(str.data() + cursor, i);
-            cursor++;
-        }
-        return std::string_view(str.data() + cursor, num);
     }
 
     Position getPosition(std::string_view str, size_t cursor)
@@ -156,7 +235,7 @@ namespace {
         size_t colCursor = lineStart;
         size_t column = 1;
         while (colCursor < std::min(cursor, str.size())) {
-            readCodePoint(str, colCursor);
+            utf8::readCodePoint(str, colCursor);
             column++;
         }
         return Position { line, column };
@@ -167,17 +246,129 @@ namespace {
         return ParseResult::Error { type, getPosition(str, cursor) };
     }
 
+    std::optional<uint32_t> parseHexEscape(std::string_view str)
+    {
+        if (str.find_first_not_of("0123456789abcdefABCDEF") != std::string_view::npos) {
+            return std::nullopt;
+        }
+        try {
+            size_t pos = 0;
+            const auto num = std::stoul(std::string(str), &pos, 16);
+            if (pos != str.size()) {
+                return std::nullopt;
+            }
+            return num;
+        } catch (const std::exception& exc) {
+            return std::nullopt;
+        }
+    }
+
+    std::optional<uint32_t> parseHexEscape(std::string_view str, size_t& cursor, size_t num)
+    {
+        if (cursor + num >= str.size()) {
+            return std::nullopt;
+        }
+        const auto n = parseHexEscape(str.substr(cursor, num));
+        if (!n) {
+            return std::nullopt;
+        }
+        cursor += num;
+        return *n;
+    }
+
+    std::optional<std::string> parseUnicodeHexEscape(
+        std::string_view str, size_t& cursor, size_t num)
+    {
+        const auto codePoint = parseHexEscape(str, cursor, num);
+        if (!codePoint) {
+            return std::nullopt;
+        }
+        const auto s = utf8::encode(*codePoint);
+        if (!s) {
+            return std::nullopt;
+        }
+        return *s;
+    }
+
     std::optional<std::string> parseString(std::string_view str, size_t& cursor)
     {
         DEBUG;
         assert(str[cursor] == '"');
-        const auto start = cursor + 1;
+        std::string ret;
+        ret.reserve(32);
+        cursor++;
         while (cursor < str.size()) {
-            cursor++;
-            if (str[cursor] == '"' && str[cursor] != '\\') {
-                const auto s = str.substr(start, cursor - start);
+            if (str[cursor] == '\\') {
+                if (cursor >= str.size()) {
+                    return std::nullopt;
+                }
+                cursor++;
+                const auto c = str[cursor];
+                switch (c) {
+                case '\\':
+                    ret.append(1, '\\');
+                    cursor++;
+                    break;
+                case '"':
+                    ret.append(1, '"');
+                    cursor++;
+                    break;
+                case 'b':
+                    ret.append(1, '\b');
+                    cursor++;
+                    break;
+                case 'f':
+                    ret.append(1, '\f');
+                    cursor++;
+                    break;
+                case 'n':
+                    ret.append(1, '\n');
+                    cursor++;
+                    break;
+                case 'r':
+                    ret.append(1, '\r');
+                    cursor++;
+                    break;
+                case 't':
+                    ret.append(1, '\t');
+                    cursor++;
+                    break;
+                case 'x': { // Should this be another unicode escape?
+                    cursor++;
+                    const auto c = parseHexEscape(str, cursor, 2);
+                    if (!c) {
+                        return std::nullopt;
+                    }
+                    ret.append(1, static_cast<char>(*c));
+                    break;
+                }
+                case 'u': {
+                    cursor++;
+                    const auto s = parseUnicodeHexEscape(str, cursor, 4);
+                    if (!s) {
+                        return std::nullopt;
+                    }
+                    ret.append(*s);
+                    break;
+                }
+                case 'U': {
+                    cursor++;
+                    const auto s = parseUnicodeHexEscape(str, cursor, 8);
+                    if (!s) {
+                        return std::nullopt;
+                    }
+                    ret.append(*s);
+                    break;
+                }
+                default:
+                    return std::nullopt;
+                }
+            } else if (str[cursor] == '"') {
                 cursor++; // Advance past closing quote
-                return std::string(s);
+                return ret;
+            } else {
+                ret.append(1, str[cursor]);
+                cursor++;
             }
         }
         return std::nullopt;
@@ -221,34 +412,28 @@ namespace {
 
     std::optional<Node::Integer> parseInteger(std::string_view str, int base)
     {
-        const auto s = std::string(str);
-        size_t pos = 0;
         try {
-            const auto num = std::stoll(s, &pos, base);
-            if (pos != s.size()) {
+            size_t pos = 0;
+            const auto num = std::stoll(std::string(str), &pos, base);
+            if (pos != str.size()) {
                 return std::nullopt;
             }
             return num;
-        } catch (const std::invalid_argument& exc) {
-            return std::nullopt;
-        } catch (const std::out_of_range& exc) {
+        } catch (const std::exception& exc) {
             return std::nullopt;
         }
     }
 
     std::optional<Node::Float> parseFloat(std::string_view str)
     {
-        const auto s = std::string(str);
-        size_t pos = 0;
         try {
-            const auto num = std::stof(s, &pos);
-            if (pos != s.size()) {
+            size_t pos = 0;
+            const auto num = std::stof(std::string(str), &pos);
+            if (pos != str.size()) {
                 return std::nullopt;
             }
             return num;
-        } catch (const std::invalid_argument& exc) {
-            return std::nullopt;
-        } catch (const std::out_of_range& exc) {
+        } catch (const std::exception& exc) {
             return std::nullopt;
         }
     }
