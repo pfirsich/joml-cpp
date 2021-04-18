@@ -8,9 +8,8 @@ using namespace std::literals;
 
 /*
  * TODO:
- * - Comments
- * - Handle unexpected end of files better
  * - Refactor: Introduce result types and replace a bunch of optionals to propagate errors better
+ * - Handle unexpected end of files better (check whether cursor is < size for every str[cursor])
  * - Trimming lines in multi line strings
  * - Test cases for every branch and every part of the spec
  */

@@ -5,7 +5,7 @@
 
 #include "joml.hpp"
 
-#define CONTEXT getContextString(str, getPosition(str, cursor))
+#define CONTEXT "===========\n" + getContextString(str, getPosition(str, cursor)) + "===========\n"
 //#define DEBUG std::cout << __FUNCTION__ << '\n' << CONTEXT << std::endl;
 #define DEBUG
 
@@ -194,33 +194,6 @@ Node& ParseResult::node()
 }
 
 namespace {
-    bool isWhitespace(char ch)
-    {
-        return ch == '\t' || ch == ' ' || ch == '\n' || ch == '\r';
-    }
-
-    size_t skipWhitespace(std::string_view str, size_t& cursor)
-    {
-        const auto start = cursor;
-        while (cursor < str.size() && isWhitespace(str[cursor]))
-            cursor++;
-        return cursor - start;
-    }
-
-    // quiet nan with arg = ""
-    template <typename T>
-    T nan()
-    {
-        constexpr auto isFloat = std::is_same_v<T, float>;
-        constexpr auto isDouble = std::is_same_v<T, double>;
-        static_assert(isFloat || isDouble);
-        if constexpr (isFloat) {
-            return std::nanf("");
-        } else if constexpr (isDouble) {
-            return std::nan("");
-        }
-    }
-
     Position getPosition(std::string_view str, size_t cursor)
     {
         size_t lineStart = 0;
@@ -239,6 +212,56 @@ namespace {
             column++;
         }
         return Position { line, column };
+    }
+
+    bool isWhitespace(char ch)
+    {
+        return ch == '\t' || ch == ' ' || ch == '\n' || ch == '\r';
+    }
+
+    bool skipTo(std::string_view str, size_t& cursor, char to)
+    {
+        while (cursor < str.size()) {
+            if (str[cursor] == to) {
+                return true;
+            }
+            cursor++;
+        }
+        return false;
+    }
+
+    // returns whether a newline was skipped
+    bool skip(std::string_view str, size_t& cursor)
+    {
+        DEBUG;
+        bool skippedNewline = false;
+        while (cursor < str.size()) {
+            if (str[cursor] == '#') {
+                if (!skipTo(str, cursor, '\n'))
+                    break;
+                skippedNewline = true;
+            } else if (!isWhitespace(str[cursor])) {
+                break;
+            } else if (str[cursor] == '\n') {
+                skippedNewline = true;
+            }
+            cursor++;
+        }
+        return skippedNewline;
+    }
+
+    // quiet nan with arg = ""
+    template <typename T>
+    T nan()
+    {
+        constexpr auto isFloat = std::is_same_v<T, float>;
+        constexpr auto isDouble = std::is_same_v<T, double>;
+        static_assert(isFloat || isDouble);
+        if constexpr (isFloat) {
+            return std::nanf("");
+        } else if constexpr (isDouble) {
+            return std::nan("");
+        }
     }
 
     ParseResult::Error makeError(ParseResult::Error::Type type, std::string_view str, size_t cursor)
@@ -377,7 +400,7 @@ namespace {
     std::optional<std::string> parseKey(std::string_view str, size_t& cursor)
     {
         DEBUG;
-        skipWhitespace(str, cursor);
+        skip(str, cursor);
         if (cursor == str.size()) {
             return std::nullopt;
         }
@@ -387,7 +410,7 @@ namespace {
             if (!s) {
                 return std::nullopt;
             }
-            skipWhitespace(str, newCursor);
+            skip(str, newCursor);
             if (str[newCursor] != ':') {
                 return std::nullopt;
             }
@@ -502,7 +525,7 @@ namespace {
     ParseResult parseNode(std::string_view str, size_t& cursor)
     {
         DEBUG;
-        skipWhitespace(str, cursor);
+        skip(str, cursor);
         if (cursor == str.size())
             return makeError(ParseResult::Error::Type::NoValue, str, cursor);
         if (str[cursor] == '{') {
@@ -551,14 +574,12 @@ namespace {
 
     bool skipSeparator(std::string_view str, size_t& cursor)
     {
-        bool separatorFound = false;
-        while (cursor < str.size()) {
-            if (str[cursor] == ',' || str[cursor] == '\n') {
-                separatorFound = true;
-            } else if (!isWhitespace(str[cursor])) {
-                break;
-            }
+        DEBUG;
+        bool separatorFound = skip(str, cursor);
+        if (cursor < str.size() && str[cursor] == ',') {
+            separatorFound = true;
             cursor++;
+            skip(str, cursor);
         }
         return separatorFound;
     }
