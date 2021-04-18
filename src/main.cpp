@@ -7,7 +7,6 @@ using namespace std::literals;
 
 /*
  * TODO:
- * - CRLF newlines
  * - Comments
  * - null
  * - Handle unexpected end of files better
