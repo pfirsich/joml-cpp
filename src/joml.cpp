@@ -239,8 +239,8 @@ namespace {
     {
         DEBUG;
         // must be a number of some kind
-        const int sign = str[0] == '-' ? -1 : 1;
-        if (str[0] == '+' || str[0] == '-') {
+        const int sign = str[cursor] == '-' ? -1 : 1;
+        if (str[cursor] == '+' || str[cursor] == '-') {
             cursor++;
         }
         const auto value = str.substr(cursor, cursorEnd - cursor);
