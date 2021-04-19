@@ -6,8 +6,7 @@
 #include "joml.hpp"
 
 #define CONTEXT "===========\n" + getContextString(str, getPosition(str, cursor)) + "===========\n"
-//#define DEBUG std::cout << __FUNCTION__ << '\n' << CONTEXT << std::endl;
-#define DEBUG
+#define DEBUG // std::cout << __FUNCTION__ << '\n' << CONTEXT << std::endl;
 
 namespace joml {
 namespace utf8 {
@@ -632,13 +631,18 @@ namespace {
                 break;
             }
 
-            if (!separatorFound) {
-                return makeError(ParseResult::Error::Type::NoSeparator, str, cursor);
+            assert(cursor <= str.size());
+            if (cursor == str.size()) {
+                if (isRoot) {
+                    // If there is nothing after the last parsed node, we are done
+                    break;
+                } else {
+                    return makeError(ParseResult::Error::Type::ExpectedDictClose, str, cursor);
+                }
             }
 
-            assert(cursor <= str.size());
-            if (cursor == str.size() && !isRoot) {
-                return makeError(ParseResult::Error::Type::ExpectedDictClose, str, cursor);
+            if (!separatorFound) {
+                return makeError(ParseResult::Error::Type::NoSeparator, str, cursor);
             }
         }
         return Node(std::move(dict));
