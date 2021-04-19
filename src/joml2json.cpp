@@ -8,7 +8,7 @@ using namespace std::literals;
 
 /*
  * TODO:
- * - Handle unexpected end of files better (check whether cursor is < size for every str[cursor])
+ * - Remove useless skips
  * - Trimming lines in multi line strings
  * - Test cases for every branch and every part of the spec
  */

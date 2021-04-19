@@ -47,7 +47,7 @@ namespace utf8 {
         const auto num = getCodePointLength(str[start]);
         for (size_t i = 1; i < num; ++i) {
             // not a valid continuation byte => just end the sequence here, excluding continuation
-            if (!isContinuationByte(str[start + i])) {
+            if (start + i >= str.size() || !isContinuationByte(str[start + i])) {
                 cursor += i;
                 return std::string_view(str.data() + start, i);
             }
@@ -294,6 +294,7 @@ namespace {
     ParseResult<std::string> parseString(std::string_view str, size_t& cursor)
     {
         DEBUG;
+        assert(cursor < str.size());
         assert(str[cursor] == '"');
         cursor++;
         std::string ret;
@@ -379,7 +380,7 @@ namespace {
     {
         DEBUG;
         skip(str, cursor);
-        if (cursor == str.size()) {
+        if (cursor >= str.size()) {
             return makeError(ParseError::Type::ExpectedKey, str, cursor);
         }
         if (str[cursor] == '"') {
@@ -388,7 +389,7 @@ namespace {
                 return s.error();
             }
             skip(str, cursor);
-            if (str[cursor] != ':') {
+            if (cursor >= str.size() || str[cursor] != ':') {
                 return makeError(ParseError::Type::ExpectedColon, str, cursor);
             }
             cursor++;
@@ -438,6 +439,7 @@ namespace {
     ParseResult<Node> parseNumber(std::string_view str, size_t cursor, size_t cursorEnd)
     {
         DEBUG;
+        assert(cursor < str.size());
         // must be a number of some kind
         const int sign = str[cursor] == '-' ? -1 : 1;
         if (str[cursor] == '+' || str[cursor] == '-') {
@@ -500,8 +502,10 @@ namespace {
     {
         DEBUG;
         skip(str, cursor);
-        if (cursor == str.size())
+
+        if (cursor >= str.size())
             return makeError(ParseError::Type::NoValue, str, cursor);
+
         if (str[cursor] == '{') {
             cursor++;
             auto res = parseDictionary(str, cursor);
@@ -579,7 +583,7 @@ namespace {
 
             const auto separatorFound = skipSeparator(str, cursor);
 
-            if (str[cursor] == ']') {
+            if (cursor < str.size() && str[cursor] == ']') {
                 cursor++;
                 break;
             }
@@ -609,19 +613,18 @@ namespace {
 
             const auto separatorFound = skipSeparator(str, cursor);
 
-            if (str[cursor] == '}') {
-                cursor++;
-                break;
-            }
-
-            assert(cursor <= str.size());
-            if (cursor == str.size()) {
+            if (cursor >= str.size()) {
                 if (isRoot) {
-                    // If there is nothing after the last parsed node, we are done
+                    // we don't need a separator or a '}' for the root dict
                     break;
                 } else {
                     return makeError(ParseError::Type::ExpectedDictClose, str, cursor);
                 }
+            }
+
+            if (str[cursor] == '}') {
+                cursor++;
+                break;
             }
 
             if (!separatorFound) {
