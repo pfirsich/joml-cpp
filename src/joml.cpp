@@ -125,71 +125,46 @@ namespace utf8 {
     }
 }
 
-std::string_view ParseResult::Error::asString(Type type)
+std::string_view asString(ParseError::Type type)
 {
     switch (type) {
-    case ParseResult::Error::Type::Unspecified:
+    case ParseError::Type::Unspecified:
         return "Unspecified";
-    case ParseResult::Error::Type::Unexpected:
+    case ParseError::Type::Unexpected:
         return "Unexpected";
-    case ParseResult::Error::Type::InvalidKey:
+    case ParseError::Type::InvalidKey:
         return "InvalidKey";
-    case ParseResult::Error::Type::NoValue:
+    case ParseError::Type::NoValue:
         return "NoValue";
-    case ParseResult::Error::Type::CouldNotParseString:
+    case ParseError::Type::CouldNotParseString:
         return "CouldNotParseString";
-    case ParseResult::Error::Type::CouldNotParseHexNumber:
+    case ParseError::Type::CouldNotParseHexNumber:
         return "CouldNotParseHexNumber";
-    case ParseResult::Error::Type::CouldNotParseOctalNumber:
+    case ParseError::Type::CouldNotParseOctalNumber:
         return "CouldNotParseOctalNumber";
-    case ParseResult::Error::Type::CouldNotParseBinaryNumber:
+    case ParseError::Type::CouldNotParseBinaryNumber:
         return "CouldNotParseBinaryNumber";
-    case ParseResult::Error::Type::CouldNotParseDecimalIntegerNumber:
+    case ParseError::Type::CouldNotParseDecimalIntegerNumber:
         return "CouldNotParseDecimalIntegerNumber";
-    case ParseResult::Error::Type::CouldNotParseFloatNumber:
+    case ParseError::Type::CouldNotParseFloatNumber:
         return "CouldNotParseFloatNumber";
-    case ParseResult::Error::Type::InvalidValue:
+    case ParseError::Type::InvalidValue:
         return "InvalidValue";
-    case ParseResult::Error::Type::NoSeparator:
+    case ParseError::Type::NoSeparator:
         return "NoSeparator";
-    case ParseResult::Error::Type::ExpectedDictClose:
+    case ParseError::Type::ExpectedDictClose:
         return "ExpectedDictClose";
-    case ParseResult::Error::Type::NotImplemented:
+    case ParseError::Type::NotImplemented:
         return "NotImplemented";
     default:
         return "Unknown";
     }
 }
 
-std::string ParseResult::Error::string() const
+std::string ParseError::string() const
 {
     return std::string(asString(type)) + " at " + std::to_string(position.line) + ":"
         + std::to_string(position.column);
-}
-
-ParseResult::operator bool() const
-{
-    return std::holds_alternative<Node>(result);
-}
-
-const ParseResult::Error& ParseResult::error() const
-{
-    return std::get<Error>(result);
-}
-
-ParseResult::Error& ParseResult::error()
-{
-    return std::get<Error>(result);
-}
-
-const Node& ParseResult::node() const
-{
-    return std::get<Node>(result);
-}
-
-Node& ParseResult::node()
-{
-    return std::get<Node>(result);
 }
 
 namespace {
@@ -263,9 +238,9 @@ namespace {
         }
     }
 
-    ParseResult::Error makeError(ParseResult::Error::Type type, std::string_view str, size_t cursor)
+    ParseError makeError(ParseError::Type type, std::string_view str, size_t cursor)
     {
-        return ParseResult::Error { type, getPosition(str, cursor) };
+        return ParseError { type, getPosition(str, cursor) };
     }
 
     std::optional<uint32_t> parseHexEscape(std::string_view str)
@@ -460,7 +435,7 @@ namespace {
         }
     }
 
-    ParseResult parseNumber(std::string_view str, size_t cursor, size_t cursorEnd)
+    ParseResult<Node> parseNumber(std::string_view str, size_t cursor, size_t cursorEnd)
     {
         DEBUG;
         // must be a number of some kind
@@ -480,19 +455,19 @@ namespace {
         if (prefix == "0x") {
             const auto n = parseInteger(value.substr(2), 16);
             if (!n) {
-                return makeError(ParseResult::Error::Type::CouldNotParseHexNumber, str, cursor);
+                return makeError(ParseError::Type::CouldNotParseHexNumber, str, cursor);
             }
             return Node(sign * *n);
         } else if (prefix == "0o") {
             const auto n = parseInteger(value.substr(2), 8);
             if (!n) {
-                return makeError(ParseResult::Error::Type::CouldNotParseOctalNumber, str, cursor);
+                return makeError(ParseError::Type::CouldNotParseOctalNumber, str, cursor);
             }
             return Node(sign * *n);
         } else if (prefix == "0b") {
             const auto n = parseInteger(value.substr(2), 2);
             if (!n) {
-                return makeError(ParseResult::Error::Type::CouldNotParseBinaryNumber, str, cursor);
+                return makeError(ParseError::Type::CouldNotParseBinaryNumber, str, cursor);
             }
             return Node(sign * *n);
         }
@@ -501,8 +476,7 @@ namespace {
         if (value.find_first_not_of("0123456789") == std::string::npos) {
             const auto n = parseInteger(value, 10);
             if (!n) {
-                return makeError(
-                    ParseResult::Error::Type::CouldNotParseDecimalIntegerNumber, str, cursor);
+                return makeError(ParseError::Type::CouldNotParseDecimalIntegerNumber, str, cursor);
             }
             return Node(sign * *n);
         }
@@ -510,33 +484,42 @@ namespace {
         if (value.find_first_not_of("0123456789.eE+-") == std::string::npos) {
             const auto n = parseFloat(value);
             if (!n) {
-                return makeError(ParseResult::Error::Type::CouldNotParseFloatNumber, str, cursor);
+                return makeError(ParseError::Type::CouldNotParseFloatNumber, str, cursor);
             }
             return Node(sign * *n);
         }
 
-        return makeError(ParseResult::Error::Type::InvalidValue, str, cursor);
+        return makeError(ParseError::Type::InvalidValue, str, cursor);
     }
 
-    ParseResult parseArray(std::string_view str, size_t& cursor);
-    ParseResult parseDictionary(std::string_view str, size_t& cursor, bool isRoot = false);
+    ParseResult<Node::Array> parseArray(std::string_view str, size_t& cursor);
+    ParseResult<Node::Dictionary> parseDictionary(
+        std::string_view str, size_t& cursor, bool isRoot = false);
 
-    ParseResult parseNode(std::string_view str, size_t& cursor)
+    ParseResult<Node> parseNode(std::string_view str, size_t& cursor)
     {
         DEBUG;
         skip(str, cursor);
         if (cursor == str.size())
-            return makeError(ParseResult::Error::Type::NoValue, str, cursor);
+            return makeError(ParseError::Type::NoValue, str, cursor);
         if (str[cursor] == '{') {
             cursor++;
-            return parseDictionary(str, cursor);
+            auto res = parseDictionary(str, cursor);
+            if (!res) {
+                return res.error();
+            }
+            return Node(std::move(res.value()));
         } else if (str[cursor] == '[') {
             cursor++;
-            return parseArray(str, cursor);
+            auto res = parseArray(str, cursor);
+            if (!res) {
+                return res.error();
+            }
+            return Node(std::move(res.value()));
         } else if (str[cursor] == '"') {
             const auto s = parseString(str, cursor);
             if (!s) {
-                return makeError(ParseResult::Error::Type::CouldNotParseString, str, cursor);
+                return makeError(ParseError::Type::CouldNotParseString, str, cursor);
             }
             return Node(*s);
         } else {
@@ -548,7 +531,7 @@ namespace {
             }
             const auto value = str.substr(cursor, valueEnd - cursor);
             if (value.empty()) {
-                return makeError(ParseResult::Error::Type::NoValue, str, cursor);
+                return makeError(ParseError::Type::NoValue, str, cursor);
             }
 
             if (value == "null") {
@@ -583,16 +566,16 @@ namespace {
         return separatorFound;
     }
 
-    ParseResult parseArray(std::string_view str, size_t& cursor)
+    ParseResult<Node::Array> parseArray(std::string_view str, size_t& cursor)
     {
         DEBUG;
         Node::Array arr;
         while (cursor < str.size()) {
             auto value = parseNode(str, cursor);
             if (!value) {
-                return value;
+                return value.error();
             }
-            arr.emplace_back(std::make_unique<Node>(std::move(value.node())));
+            arr.emplace_back(std::make_unique<Node>(std::move(value.value())));
 
             const auto separatorFound = skipSeparator(str, cursor);
 
@@ -602,27 +585,27 @@ namespace {
             }
 
             if (!separatorFound) {
-                return makeError(ParseResult::Error::Type::NoSeparator, str, cursor);
+                return makeError(ParseError::Type::NoSeparator, str, cursor);
             }
         }
-        return Node(std::move(arr));
+        return std::move(arr);
     }
 
-    ParseResult parseDictionary(std::string_view str, size_t& cursor, bool isRoot)
+    ParseResult<Node::Dictionary> parseDictionary(std::string_view str, size_t& cursor, bool isRoot)
     {
         DEBUG;
         Node::Dictionary dict;
         while (cursor < str.size()) {
             const auto key = parseKey(str, cursor);
             if (!key) {
-                return makeError(ParseResult::Error::Type::InvalidKey, str, cursor);
+                return makeError(ParseError::Type::InvalidKey, str, cursor);
             }
 
             auto value = parseNode(str, cursor);
             if (!value) {
-                return value;
+                return value.error();
             }
-            dict.emplace_back(std::move(*key), std::make_unique<Node>(std::move(value.node())));
+            dict.emplace_back(std::move(*key), std::make_unique<Node>(std::move(value.value())));
 
             const auto separatorFound = skipSeparator(str, cursor);
 
@@ -637,15 +620,15 @@ namespace {
                     // If there is nothing after the last parsed node, we are done
                     break;
                 } else {
-                    return makeError(ParseResult::Error::Type::ExpectedDictClose, str, cursor);
+                    return makeError(ParseError::Type::ExpectedDictClose, str, cursor);
                 }
             }
 
             if (!separatorFound) {
-                return makeError(ParseResult::Error::Type::NoSeparator, str, cursor);
+                return makeError(ParseError::Type::NoSeparator, str, cursor);
             }
         }
-        return Node(std::move(dict));
+        return std::move(dict);
     }
 }
 
@@ -678,7 +661,7 @@ std::string getContextString(std::string_view str, const Position& position)
     return ret;
 }
 
-ParseResult parse(std::string_view str)
+ParseResult<Node::Dictionary> parse(std::string_view str)
 {
     size_t cursor = 0;
     return parseDictionary(str, cursor, true);

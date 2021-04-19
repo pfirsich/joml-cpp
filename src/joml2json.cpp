@@ -8,7 +8,7 @@ using namespace std::literals;
 
 /*
  * TODO:
- * - Refactor: Introduce result types and replace a bunch of optionals to propagate errors better
+ * - Replace some optionals with new result type to provide more errors
  * - Handle unexpected end of files better (check whether cursor is < size for every str[cursor])
  * - Trimming lines in multi line strings
  * - Test cases for every branch and every part of the spec
@@ -167,7 +167,7 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    const auto res = joml::parse(*source);
+    auto res = joml::parse(*source);
     if (!res) {
         const auto err = res.error();
         std::cerr << "Error parsing JOML file: " << err.string() << std::endl;
@@ -175,6 +175,6 @@ int main(int argc, char** argv)
         return 2;
     }
 
-    std::cout << toJson(res.node()) << std::endl;
+    std::cout << toJson(joml::Node(std::move(res.value()))) << std::endl;
     return 0;
 }

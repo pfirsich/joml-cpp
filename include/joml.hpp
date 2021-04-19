@@ -64,56 +64,73 @@ struct Position {
     size_t column;
 };
 
-class ParseResult {
-public:
-    struct Error {
-        enum class Type {
-            Unspecified,
-            Unexpected,
-            InvalidKey,
-            NoValue,
-            CouldNotParseString,
-            CouldNotParseHexNumber,
-            CouldNotParseOctalNumber,
-            CouldNotParseBinaryNumber,
-            CouldNotParseDecimalIntegerNumber,
-            CouldNotParseFloatNumber,
-            InvalidValue,
-            NoSeparator,
-            ExpectedDictClose,
-            InvalidEscape,
-            NotImplemented,
-        };
-
-        Type type;
-        Position position;
-
-        static std::string_view asString(Type type);
-
-        std::string string() const;
+struct ParseError {
+    enum class Type {
+        Unspecified,
+        Unexpected,
+        InvalidKey,
+        NoValue,
+        CouldNotParseString,
+        CouldNotParseHexNumber,
+        CouldNotParseOctalNumber,
+        CouldNotParseBinaryNumber,
+        CouldNotParseDecimalIntegerNumber,
+        CouldNotParseFloatNumber,
+        InvalidValue,
+        NoSeparator,
+        ExpectedDictClose,
+        InvalidEscape,
+        NotImplemented,
     };
 
-    std::variant<Node, Error> result;
+    Type type;
+    Position position;
 
-    template <typename T>
-    ParseResult(T&& arg)
-        : result(std::forward<T>(arg))
+    std::string string() const;
+};
+
+std::string_view asString(ParseError::Type type);
+
+template <typename T>
+struct ParseResult {
+    std::variant<T, ParseError> result;
+
+    template <typename U>
+    ParseResult(U&& arg)
+        : result(std::forward<U>(arg))
     {
     }
 
     ParseResult(ParseResult&&) = default;
 
-    explicit operator bool() const;
+    explicit operator bool() const
+    {
+        return std::holds_alternative<T>(result);
+    }
 
-    const Error& error() const;
-    Error& error();
+    const ParseError& error() const
+    {
+        return std::get<ParseError>(result);
+    }
 
-    const Node& node() const;
-    Node& node();
+    ParseError& error()
+    {
+        return std::get<ParseError>(result);
+    }
+
+    const T& value() const
+    {
+        return std::get<T>(result);
+    }
+
+    T& value()
+    {
+        return std::get<T>(result);
+    }
 };
 
 std::string getContextString(std::string_view str, const Position& position);
 
-ParseResult parse(std::string_view str);
+ParseResult<Node::Dictionary> parse(std::string_view str);
 
 } // namespace joml
