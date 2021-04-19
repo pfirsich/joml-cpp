@@ -315,6 +315,18 @@ namespace {
                     ret.append(1, '"');
                     cursor++;
                     break;
+                case '\n':
+                    // Just skip the newline
+                    cursor++;
+                    break;
+                case '\r':
+                    // I think this is the only spot, where I have to handle Windows newlines
+                    // explicitly and the code doesn't "just work" for CRLF.
+                    if (cursor + 1 >= str.size() || str[cursor + 1] != '\n') {
+                        return makeError(ParseError::Type::InvalidEscape, str, cursor);
+                    }
+                    cursor += 2;
+                    break;
                 case 'b':
                     ret.append(1, '\b');
                     cursor++;
