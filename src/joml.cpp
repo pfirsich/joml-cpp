@@ -379,7 +379,6 @@ namespace {
     ParseResult<std::string> parseKey(std::string_view str, size_t& cursor)
     {
         DEBUG;
-        skip(str, cursor);
         if (cursor >= str.size()) {
             return makeError(ParseError::Type::ExpectedKey, str, cursor);
         }
@@ -501,8 +500,6 @@ namespace {
     ParseResult<Node> parseNode(std::string_view str, size_t& cursor)
     {
         DEBUG;
-        skip(str, cursor);
-
         if (cursor >= str.size())
             return makeError(ParseError::Type::NoValue, str, cursor);
 
@@ -575,6 +572,7 @@ namespace {
         DEBUG;
         Node::Array arr;
         while (cursor < str.size()) {
+            skip(str, cursor);
             auto value = parseNode(str, cursor);
             if (!value) {
                 return value.error();
@@ -600,11 +598,13 @@ namespace {
         DEBUG;
         Node::Dictionary dict;
         while (cursor < str.size()) {
+            skip(str, cursor);
             const auto key = parseKey(str, cursor);
             if (!key) {
                 return key.error();
             }
 
+            skip(str, cursor);
             auto value = parseNode(str, cursor);
             if (!value) {
                 return value.error();

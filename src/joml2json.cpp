@@ -8,7 +8,6 @@ using namespace std::literals;
 
 /*
  * TODO:
- * - Remove useless skips
  * - Trimming lines in multi line strings
  * - Test cases for every branch and every part of the spec
  */
