@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0.0)
 
-project(joml)
+project(joml-cpp)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS on)
@@ -11,12 +11,11 @@ if (JOML_ENABLE_ASAN)
   include(cmake/asan.cmake)
 endif()
 
-set(SRC
-  main.cpp
-  joml.cpp
-)
-list(TRANSFORM SRC PREPEND src/)
+add_library(joml-cpp src/joml.cpp)
+target_include_directories(joml-cpp PUBLIC include)
+set_wall(joml-cpp)
 
-add_executable(joml ${SRC})
-target_include_directories(joml PUBLIC include)
-set_wall(joml)
+add_executable(joml2json src/joml2json.cpp)
+target_include_directories(joml2json PUBLIC include)
+target_link_libraries(joml2json joml-cpp)
+set_wall(joml2json)
