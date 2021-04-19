@@ -6,12 +6,6 @@
 
 using namespace std::literals;
 
-/*
- * TODO:
- * - Trimming lines in multi line strings
- * - Test cases for every branch and every part of the spec
- */
-
 std::string getIndent(size_t depth)
 {
     std::string ret;
