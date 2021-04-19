@@ -70,7 +70,6 @@ struct ParseError {
         Unexpected,
         InvalidKey,
         NoValue,
-        CouldNotParseString,
         CouldNotParseHexNumber,
         CouldNotParseOctalNumber,
         CouldNotParseBinaryNumber,
@@ -79,8 +78,10 @@ struct ParseError {
         InvalidValue,
         NoSeparator,
         ExpectedDictClose,
+        ExpectedKey,
+        ExpectedColon,
+        UnterminatedString,
         InvalidEscape,
-        NotImplemented,
     };
 
     Type type;
@@ -118,12 +119,12 @@ struct ParseResult {
         return std::get<ParseError>(result);
     }
 
-    const T& value() const
+    const T& operator*() const
     {
         return std::get<T>(result);
     }
 
-    T& value()
+    T& operator*()
     {
         return std::get<T>(result);
     }

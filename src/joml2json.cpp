@@ -8,7 +8,6 @@ using namespace std::literals;
 
 /*
  * TODO:
- * - Replace some optionals with new result type to provide more errors
  * - Handle unexpected end of files better (check whether cursor is < size for every str[cursor])
  * - Trimming lines in multi line strings
  * - Test cases for every branch and every part of the spec
@@ -175,6 +174,6 @@ int main(int argc, char** argv)
         return 2;
     }
 
-    std::cout << toJson(joml::Node(std::move(res.value()))) << std::endl;
+    std::cout << toJson(joml::Node(std::move(*res))) << std::endl;
     return 0;
 }

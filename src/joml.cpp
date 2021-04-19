@@ -136,8 +136,6 @@ std::string_view asString(ParseError::Type type)
         return "InvalidKey";
     case ParseError::Type::NoValue:
         return "NoValue";
-    case ParseError::Type::CouldNotParseString:
-        return "CouldNotParseString";
     case ParseError::Type::CouldNotParseHexNumber:
         return "CouldNotParseHexNumber";
     case ParseError::Type::CouldNotParseOctalNumber:
@@ -154,8 +152,14 @@ std::string_view asString(ParseError::Type type)
         return "NoSeparator";
     case ParseError::Type::ExpectedDictClose:
         return "ExpectedDictClose";
-    case ParseError::Type::NotImplemented:
-        return "NotImplemented";
+    case ParseError::Type::ExpectedKey:
+        return "ExpectedKey";
+    case ParseError::Type::ExpectedColon:
+        return "ExpectedColon";
+    case ParseError::Type::UnterminatedString:
+        return "UnterminatedString";
+    case ParseError::Type::InvalidEscape:
+        return "InvalidEscape";
     default:
         return "Unknown";
     }
@@ -287,19 +291,19 @@ namespace {
         return *s;
     }
 
-    std::optional<std::string> parseString(std::string_view str, size_t& cursor)
+    ParseResult<std::string> parseString(std::string_view str, size_t& cursor)
     {
         DEBUG;
         assert(str[cursor] == '"');
+        cursor++;
         std::string ret;
         ret.reserve(32);
-        cursor++;
         while (cursor < str.size()) {
             if (str[cursor] == '\\') {
-                if (cursor >= str.size()) {
-                    return std::nullopt;
-                }
                 cursor++;
+                if (cursor >= str.size()) {
+                    return makeError(ParseError::Type::InvalidEscape, str, cursor);
+                }
                 const auto c = str[cursor];
                 switch (c) {
                 case '\\':
@@ -334,7 +338,7 @@ namespace {
                     cursor++;
                     const auto c = parseHexEscape(str, cursor, 2);
                     if (!c) {
-                        return std::nullopt;
+                        return makeError(ParseError::Type::InvalidEscape, str, cursor);
                     }
                     ret.append(1, static_cast<char>(*c));
                     break;
@@ -343,7 +347,7 @@ namespace {
                     cursor++;
                     const auto s = parseUnicodeHexEscape(str, cursor, 4);
                     if (!s) {
-                        return std::nullopt;
+                        return makeError(ParseError::Type::InvalidEscape, str, cursor);
                     }
                     ret.append(*s);
                     break;
@@ -352,13 +356,13 @@ namespace {
                     cursor++;
                     const auto s = parseUnicodeHexEscape(str, cursor, 8);
                     if (!s) {
-                        return std::nullopt;
+                        return makeError(ParseError::Type::InvalidEscape, str, cursor);
                     }
                     ret.append(*s);
                     break;
                 }
                 default:
-                    return std::nullopt;
+                    return makeError(ParseError::Type::InvalidEscape, str, cursor);
                 }
             } else if (str[cursor] == '"') {
                 cursor++; // Advance past closing quote
@@ -368,41 +372,37 @@ namespace {
                 cursor++;
             }
         }
-        return std::nullopt;
+        return makeError(ParseError::Type::UnterminatedString, str, cursor);
     }
 
-    std::optional<std::string> parseKey(std::string_view str, size_t& cursor)
+    ParseResult<std::string> parseKey(std::string_view str, size_t& cursor)
     {
         DEBUG;
         skip(str, cursor);
         if (cursor == str.size()) {
-            return std::nullopt;
+            return makeError(ParseError::Type::ExpectedKey, str, cursor);
         }
-        size_t newCursor = cursor;
-        if (str[newCursor] == '"') {
-            const auto s = parseString(str, newCursor);
+        if (str[cursor] == '"') {
+            const auto s = parseString(str, cursor);
             if (!s) {
-                return std::nullopt;
+                return s.error();
             }
-            skip(str, newCursor);
-            if (str[newCursor] != ':') {
-                return std::nullopt;
+            skip(str, cursor);
+            if (str[cursor] != ':') {
+                return makeError(ParseError::Type::ExpectedColon, str, cursor);
             }
-            newCursor++;
+            cursor++;
             return *s;
         } else {
-            while (str[newCursor] != ':') {
-                newCursor++;
-                if (newCursor >= str.size()) {
-                    return std::nullopt;
-                }
+            const auto start = cursor;
+            if (!skipTo(str, cursor, ':')) {
+                return makeError(ParseError::Type::ExpectedColon, str, cursor);
             }
-            const auto key = str.substr(cursor, newCursor - cursor);
+            const auto key = str.substr(start, cursor - start);
             if (key.empty()) {
-                return std::nullopt;
+                return makeError(ParseError::Type::InvalidKey, str, cursor);
             }
-            newCursor++; // skip ':'
-            cursor = newCursor;
+            cursor++; // skip ':'
             return std::string(key);
         }
     }
@@ -508,18 +508,18 @@ namespace {
             if (!res) {
                 return res.error();
             }
-            return Node(std::move(res.value()));
+            return Node(std::move(*res));
         } else if (str[cursor] == '[') {
             cursor++;
             auto res = parseArray(str, cursor);
             if (!res) {
                 return res.error();
             }
-            return Node(std::move(res.value()));
+            return Node(std::move(*res));
         } else if (str[cursor] == '"') {
             const auto s = parseString(str, cursor);
             if (!s) {
-                return makeError(ParseError::Type::CouldNotParseString, str, cursor);
+                return s.error();
             }
             return Node(*s);
         } else {
@@ -575,12 +575,12 @@ namespace {
             if (!value) {
                 return value.error();
             }
-            arr.emplace_back(std::make_unique<Node>(std::move(value.value())));
+            arr.emplace_back(std::make_unique<Node>(std::move(*value)));
 
             const auto separatorFound = skipSeparator(str, cursor);
 
             if (str[cursor] == ']') {
-                cursor++; // skip ']'
+                cursor++;
                 break;
             }
 
@@ -598,19 +598,19 @@ namespace {
         while (cursor < str.size()) {
             const auto key = parseKey(str, cursor);
             if (!key) {
-                return makeError(ParseError::Type::InvalidKey, str, cursor);
+                return key.error();
             }
 
             auto value = parseNode(str, cursor);
             if (!value) {
                 return value.error();
             }
-            dict.emplace_back(std::move(*key), std::make_unique<Node>(std::move(value.value())));
+            dict.emplace_back(std::move(*key), std::make_unique<Node>(std::move(*value)));
 
             const auto separatorFound = skipSeparator(str, cursor);
 
             if (str[cursor] == '}') {
-                cursor++; // skip '}'
+                cursor++;
                 break;
             }
 
