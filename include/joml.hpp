@@ -36,8 +36,15 @@ public:
     using Dictionary = std::vector<std::pair<std::string, std::unique_ptr<Node>>>;
 
     template <typename T>
-    Node(T&& arg)
+    Node(T&& arg, std::string annotation = "")
         : data_(std::forward<T>(arg))
+        , annotation_(std::move(annotation))
+    {
+    }
+
+    Node(Node&& other, std::string annotation)
+        : data_(std::move(other.data_))
+        , annotation_(std::move(annotation))
     {
     }
 
@@ -55,8 +62,11 @@ public:
         return std::get<T>(data_);
     }
 
+    const std::string& getAnnotation() const;
+
 private:
     std::variant<Null, String, Bool, Integer, Float, Array, Dictionary> data_;
+    std::string annotation_;
 };
 
 struct Position {
@@ -82,6 +92,7 @@ struct ParseError {
         ExpectedColon,
         UnterminatedString,
         InvalidEscape,
+        ExpectedClosingParenthesis,
     };
 
     Type type;

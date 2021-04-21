@@ -125,6 +125,11 @@ namespace utf8 {
     }
 }
 
+const std::string& Node::getAnnotation() const
+{
+    return annotation_;
+}
+
 std::string_view asString(ParseError::Type type)
 {
     switch (type) {
@@ -160,6 +165,8 @@ std::string_view asString(ParseError::Type type)
         return "UnterminatedString";
     case ParseError::Type::InvalidEscape:
         return "InvalidEscape";
+    case ParseError::Type::ExpectedClosingParenthesis:
+        return "ExpectedClosingParenthesis";
     default:
         return "Unknown";
     }
@@ -516,28 +523,40 @@ namespace {
         if (cursor >= str.size())
             return makeError(ParseError::Type::NoValue, str, cursor);
 
+        std::string annotation;
+        if (str[cursor] == '(') {
+            const auto start = cursor + 1;
+            const auto found = skipTo(str, cursor, ')');
+            if (!found) {
+                return makeError(ParseError::Type::ExpectedClosingParenthesis, str, cursor);
+            }
+            annotation = str.substr(start, cursor - start);
+            cursor++;
+            skip(str, cursor);
+        }
+
         if (str[cursor] == '{') {
             cursor++;
             auto res = parseDictionary(str, cursor);
             if (!res) {
                 return res.error();
             }
-            return Node(std::move(*res));
+            return Node(std::move(*res), std::move(annotation));
         } else if (str[cursor] == '[') {
             cursor++;
             auto res = parseArray(str, cursor);
             if (!res) {
                 return res.error();
             }
-            return Node(std::move(*res));
+            return Node(std::move(*res), std::move(annotation));
         } else if (str[cursor] == '"') {
-            const auto s = parseString(str, cursor);
+            auto s = parseString(str, cursor);
             if (!s) {
                 return s.error();
             }
-            return Node(*s);
+            return Node(std::move(*s), std::move(annotation));
         } else {
-            const auto valueChars
+            static const auto valueChars
                 = "0123456789abcdefghijlmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.+-";
             auto valueEnd = str.find_first_not_of(valueChars, cursor);
             if (valueEnd == std::string_view::npos) {
@@ -550,21 +569,21 @@ namespace {
 
             if (value == "null") {
                 cursor += value.size();
-                return Node(Node::Null {});
+                return Node(Node::Null {}, std::move(annotation));
             } else if (value == "true") {
                 cursor += value.size();
-                return Node(true);
+                return Node(true, std::move(annotation));
             } else if (value == "false") {
                 cursor += value.size();
-                return Node(false);
+                return Node(false, std::move(annotation));
             }
 
             auto node = parseNumber(str, cursor, valueEnd);
             if (!node) {
-                return node;
+                return node.error();
             }
             cursor += value.size();
-            return node;
+            return Node(std::move(*node), std::move(annotation));
         }
     }
 
