@@ -80,7 +80,7 @@ std::string toJson(const joml::Node& node, size_t depth = 0)
         const auto& dict = node.as<joml::Node::Dictionary>();
         for (size_t i = 0; i < dict.size(); ++i) {
             ret.append(indent + "\"" + dict[i].first + "\": ");
-            ret.append(toJson(*dict[i].second, depth + 1) + (i < dict.size() - 1 ? ",\n" : "\n"));
+            ret.append(toJson(dict[i].second, depth + 1) + (i < dict.size() - 1 ? ",\n" : "\n"));
         }
         ret.append(getIndent(depth) + "}");
         return ret;
@@ -90,7 +90,7 @@ std::string toJson(const joml::Node& node, size_t depth = 0)
         ret.append("[\n");
         const auto& arr = node.as<joml::Node::Array>();
         for (size_t i = 0; i < arr.size(); ++i) {
-            ret.append(indent + toJson(*arr[i], depth + 1) + (i < arr.size() - 1 ? ",\n" : "\n"));
+            ret.append(indent + toJson(arr[i], depth + 1) + (i < arr.size() - 1 ? ",\n" : "\n"));
         }
         ret.append(getIndent(depth) + "]");
         return ret;

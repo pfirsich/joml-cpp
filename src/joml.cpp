@@ -590,7 +590,7 @@ namespace {
             if (!value) {
                 return value.error();
             }
-            arr.emplace_back(std::make_unique<Node>(std::move(*value)));
+            arr.emplace_back(Node(std::move(*value)));
 
             const auto separatorFound = skipSeparator(str, cursor);
 
@@ -622,7 +622,7 @@ namespace {
             if (!value) {
                 return value.error();
             }
-            dict.emplace_back(std::move(*key), std::make_unique<Node>(std::move(*value)));
+            dict.emplace_back(std::move(*key), Node(std::move(*value)));
 
             const auto separatorFound = skipSeparator(str, cursor);
 

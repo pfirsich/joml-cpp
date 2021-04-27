@@ -32,8 +32,8 @@ public:
     using Bool = bool;
     using Integer = int64_t;
     using Float = double;
-    using Array = std::vector<std::unique_ptr<Node>>;
-    using Dictionary = std::vector<std::pair<std::string, std::unique_ptr<Node>>>;
+    using Array = std::vector<Node>;
+    using Dictionary = std::vector<std::pair<std::string, Node>>;
 
     template <typename T>
     Node(T&& arg)
