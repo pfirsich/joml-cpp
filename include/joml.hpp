@@ -43,6 +43,8 @@ public:
 
     Node(Node&&) = default;
 
+    Node(const Node&) = default;
+
     template <typename T>
     bool is() const
     {
