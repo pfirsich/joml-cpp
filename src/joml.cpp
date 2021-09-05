@@ -259,7 +259,7 @@ namespace {
                 return std::nullopt;
             }
             return num;
-        } catch (const std::exception& exc) {
+        } catch (const std::exception&) {
             return std::nullopt;
         }
     }
