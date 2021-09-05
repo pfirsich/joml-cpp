@@ -36,7 +36,7 @@ public:
     using Dictionary = std::vector<std::pair<std::string, Node>>;
 
     template <typename T>
-    Node(T&& arg)
+    explicit Node(T&& arg)
         : data_(std::forward<T>(arg))
     {
     }

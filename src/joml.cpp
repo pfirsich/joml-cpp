@@ -462,7 +462,7 @@ namespace {
         if (value == "inf") {
             return Node(sign * std::numeric_limits<Node::Float>::infinity());
         } else if (value == "nan") {
-            return nan<Node::Float>();
+            return Node { nan<Node::Float>() };
         }
 
         const auto prefix = value.substr(0, 2);
