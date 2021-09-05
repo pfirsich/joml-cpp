@@ -24,6 +24,17 @@ namespace utf8 {
     std::string_view readCodePoint(std::string_view str, size_t& cursor);
 }
 
+namespace detail {
+    template <typename T, typename V>
+    struct isVariantType : std::false_type {
+    };
+
+    template <typename T, typename... Vs>
+    struct isVariantType<T, std::variant<Vs...>>
+        : std::bool_constant<(std::is_same_v<T, Vs> || ...)> {
+    };
+}
+
 class Node {
 public:
     struct Null {
@@ -35,15 +46,20 @@ public:
     using Array = std::vector<Node>;
     using Dictionary = std::vector<std::pair<std::string, Node>>;
 
-    template <typename T>
-    explicit Node(T&& arg)
-        : data_(std::forward<T>(arg))
-    {
-    }
+    using Variant = std::variant<Null, String, Bool, Integer, Float, Array, Dictionary>;
 
     Node(Node&&) = default;
 
     Node(const Node&) = default;
+
+    // This silly massaging is required to appease the devilish MSVC
+    // clang will simply compile this without any enable_if.
+    template <typename T,
+        typename = std::enable_if_t<detail::isVariantType<std::decay_t<T>, Variant>::value>>
+    explicit Node(T&& arg)
+        : data_(std::forward<T>(arg))
+    {
+    }
 
     template <typename T>
     bool is() const
@@ -84,7 +100,7 @@ public:
     }
 
 private:
-    std::variant<Null, String, Bool, Integer, Float, Array, Dictionary> data_;
+    Variant data_;
 };
 
 struct Position {
