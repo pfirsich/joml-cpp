@@ -51,10 +51,36 @@ public:
         return std::holds_alternative<T>(data_);
     }
 
+    template <>
+    bool is<Float>() const
+    {
+        return std::holds_alternative<Float>(data_) || std::holds_alternative<Integer>(data_);
+    }
+
     template <typename T>
-    const T& as() const
+    struct AsReturn {
+        using Type = const T&;
+    };
+
+    template <>
+    struct AsReturn<Float> {
+        using Type = Float;
+    };
+
+    template <typename T>
+    typename AsReturn<T>::Type as() const
     {
         return std::get<T>(data_);
+    }
+
+    template <>
+    typename AsReturn<Float>::Type as<Float>() const
+    {
+        if (is<Integer>()) {
+            return static_cast<Float>(as<Integer>());
+        } else {
+            return std::get<Float>(data_);
+        }
     }
 
 private:
