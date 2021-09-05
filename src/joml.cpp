@@ -350,11 +350,11 @@ namespace {
                     break;
                 case 'x': { // Should this be another unicode escape?
                     cursor++;
-                    const auto c = parseHexEscape(str, cursor, 2);
-                    if (!c) {
+                    const auto x = parseHexEscape(str, cursor, 2);
+                    if (!x) {
                         return makeError(ParseError::Type::InvalidEscape, str, cursor);
                     }
-                    ret.append(1, static_cast<char>(*c));
+                    ret.append(1, static_cast<char>(*x));
                     break;
                 }
                 case 'u': {
@@ -429,7 +429,7 @@ namespace {
                 return std::nullopt;
             }
             return num;
-        } catch (const std::exception& exc) {
+        } catch (const std::exception&) {
             return std::nullopt;
         }
     }
@@ -443,7 +443,7 @@ namespace {
                 return std::nullopt;
             }
             return num;
-        } catch (const std::exception& exc) {
+        } catch (const std::exception&) {
             return std::nullopt;
         }
     }
@@ -658,7 +658,7 @@ std::string getContextString(std::string_view str, const Position& position)
         }
     }
 
-    const int numLines = lineStarts.size();
+    const int numLines = static_cast<int>(lineStarts.size());
     const int numContextLines = 1;
     const auto startLine = std::max(1, static_cast<int>(position.line) - numContextLines);
     const auto endLine = std::min(numLines, static_cast<int>(position.line) + numContextLines);
