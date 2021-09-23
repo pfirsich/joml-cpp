@@ -5,8 +5,9 @@
 
 #include "joml.hpp"
 
-#define CONTEXT "===========\n" + getContextString(str, getPosition(str, cursor)) + "===========\n"
-#define DEBUG // std::cout << __FUNCTION__ << '\n' << CONTEXT << std::endl;
+#define JOML_CONTEXT                                                                               \
+    "===========\n" + getContextString(str, getPosition(str, cursor)) + "===========\n"
+#define JOML_DEBUG // std::cout << __FUNCTION__ << '\n' << JOML_CONTEXT << std::endl;
 
 namespace joml {
 namespace utf8 {
@@ -211,7 +212,7 @@ namespace {
     // returns whether a newline was skipped
     bool skip(std::string_view str, size_t& cursor)
     {
-        DEBUG;
+        JOML_DEBUG;
         bool skippedNewline = false;
         while (cursor < str.size()) {
             if (str[cursor] == '#') {
@@ -293,7 +294,7 @@ namespace {
 
     ParseResult<std::string> parseString(std::string_view str, size_t& cursor)
     {
-        DEBUG;
+        JOML_DEBUG;
         assert(cursor < str.size());
         assert(str[cursor] == '"');
         cursor++;
@@ -391,7 +392,7 @@ namespace {
 
     ParseResult<std::string> parseKey(std::string_view str, size_t& cursor)
     {
-        DEBUG;
+        JOML_DEBUG;
         if (cursor >= str.size()) {
             return makeError(ParseError::Type::ExpectedKey, str, cursor);
         }
@@ -450,7 +451,7 @@ namespace {
 
     ParseResult<Node> parseNumber(std::string_view str, size_t cursor, size_t cursorEnd)
     {
-        DEBUG;
+        JOML_DEBUG;
         assert(cursor < str.size());
         // must be a number of some kind
         const int sign = str[cursor] == '-' ? -1 : 1;
@@ -512,7 +513,7 @@ namespace {
 
     ParseResult<Node> parseNode(std::string_view str, size_t& cursor)
     {
-        DEBUG;
+        JOML_DEBUG;
         if (cursor >= str.size())
             return makeError(ParseError::Type::NoValue, str, cursor);
 
@@ -570,7 +571,7 @@ namespace {
 
     bool skipSeparator(std::string_view str, size_t& cursor)
     {
-        DEBUG;
+        JOML_DEBUG;
         bool separatorFound = skip(str, cursor);
         if (cursor < str.size() && str[cursor] == ',') {
             separatorFound = true;
@@ -582,7 +583,7 @@ namespace {
 
     ParseResult<Node::Array> parseArray(std::string_view str, size_t& cursor)
     {
-        DEBUG;
+        JOML_DEBUG;
         Node::Array arr;
         while (cursor < str.size()) {
             skip(str, cursor);
@@ -608,7 +609,7 @@ namespace {
 
     ParseResult<Node::Dictionary> parseDictionary(std::string_view str, size_t& cursor, bool isRoot)
     {
-        DEBUG;
+        JOML_DEBUG;
         Node::Dictionary dict;
         while (cursor < str.size()) {
             skip(str, cursor);
