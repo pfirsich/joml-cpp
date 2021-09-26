@@ -613,6 +613,12 @@ namespace {
         Node::Dictionary dict;
         while (cursor < str.size()) {
             skip(str, cursor);
+
+            if (str[cursor] == '}') {
+                cursor++;
+                break;
+            }
+
             const auto key = parseKey(str, cursor);
             if (!key) {
                 return key.error();
@@ -634,11 +640,6 @@ namespace {
                 } else {
                     return makeError(ParseError::Type::ExpectedDictClose, str, cursor);
                 }
-            }
-
-            if (str[cursor] == '}') {
-                cursor++;
-                break;
             }
 
             if (!separatorFound) {
