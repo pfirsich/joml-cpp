@@ -37,8 +37,7 @@ namespace detail {
 
 class Node {
 public:
-    struct Null {
-    };
+    struct Null { };
     using String = std::string;
     using Bool = bool;
     using Integer = int64_t;
@@ -64,23 +63,15 @@ public:
     template <typename T>
     bool is() const
     {
+        if constexpr (std::is_same_v<T, Float>) {
+            return std::holds_alternative<Float>(data_) || std::holds_alternative<Integer>(data_);
+        }
         return std::holds_alternative<T>(data_);
-    }
-
-    template <>
-    bool is<Float>() const
-    {
-        return std::holds_alternative<Float>(data_) || std::holds_alternative<Integer>(data_);
     }
 
     template <typename T>
     struct AsReturn {
         using Type = const T&;
-    };
-
-    template <>
-    struct AsReturn<Float> {
-        using Type = Float;
     };
 
     template <typename T>
@@ -89,19 +80,24 @@ public:
         return std::get<T>(data_);
     }
 
-    template <>
-    typename AsReturn<Float>::Type as<Float>() const
-    {
-        if (is<Integer>()) {
-            return static_cast<Float>(as<Integer>());
-        } else {
-            return std::get<Float>(data_);
-        }
-    }
-
 private:
     Variant data_;
 };
+
+template <>
+struct Node::AsReturn<Node::Float> {
+    using Type = Float;
+};
+
+template <>
+typename Node::AsReturn<Node::Float>::Type Node::as<Node::Float>() const
+{
+    if (is<Integer>()) {
+        return static_cast<Float>(as<Integer>());
+    } else {
+        return std::get<Float>(data_);
+    }
+}
 
 struct Position {
     size_t line;
