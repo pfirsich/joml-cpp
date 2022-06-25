@@ -604,7 +604,7 @@ namespace {
                 return makeError(ParseError::Type::NoSeparator, str, cursor);
             }
         }
-        return std::move(arr);
+        return arr;
     }
 
     ParseResult<Node::Dictionary> parseDictionary(std::string_view str, size_t& cursor, bool isRoot)
@@ -646,7 +646,7 @@ namespace {
                 return makeError(ParseError::Type::NoSeparator, str, cursor);
             }
         }
-        return std::move(dict);
+        return dict;
     }
 }
 
