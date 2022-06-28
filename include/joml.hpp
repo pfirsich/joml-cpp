@@ -89,16 +89,6 @@ struct Node::AsReturn<Node::Float> {
     using Type = Float;
 };
 
-template <>
-typename Node::AsReturn<Node::Float>::Type Node::as<Node::Float>() const
-{
-    if (is<Integer>()) {
-        return static_cast<Float>(as<Integer>());
-    } else {
-        return std::get<Float>(data_);
-    }
-}
-
 struct Position {
     size_t line;
     size_t column;

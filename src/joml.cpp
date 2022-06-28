@@ -126,6 +126,16 @@ namespace utf8 {
     }
 }
 
+template <>
+typename Node::AsReturn<Node::Float>::Type Node::as<Node::Float>() const
+{
+    if (is<Integer>()) {
+        return static_cast<Float>(as<Integer>());
+    } else {
+        return std::get<Float>(data_);
+    }
+}
+
 std::string_view asString(ParseError::Type type)
 {
     switch (type) {
