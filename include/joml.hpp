@@ -24,19 +24,9 @@ namespace utf8 {
     std::string_view readCodePoint(std::string_view str, size_t& cursor);
 }
 
-namespace detail {
-    template <typename T, typename V>
-    struct isVariantType : std::false_type {
-    };
-
-    template <typename T, typename... Vs>
-    struct isVariantType<T, std::variant<Vs...>>
-        : std::bool_constant<(std::is_same_v<T, Vs> || ...)> {
-    };
-}
-
 class Node {
 public:
+    struct Invalid { };
     struct Null { };
     using String = std::string;
     using Bool = bool;
@@ -45,20 +35,17 @@ public:
     using Array = std::vector<Node>;
     using Dictionary = std::vector<std::pair<std::string, Node>>;
 
-    using Variant = std::variant<Null, String, Bool, Integer, Float, Array, Dictionary>;
+    Node() : data_(Invalid {}) { }
+    Node(Null v) : data_(std::move(v)) { }
+    Node(String v) : data_(std::move(v)) { }
+    Node(Bool v) : data_(v) { }
+    Node(Integer v) : data_(v) { }
+    Node(Float v) : data_(v) { }
+    Node(Array v) : data_(std::move(v)) { }
+    Node(Dictionary v) : data_(std::move(v)) { }
 
     Node(Node&&) = default;
-
     Node(const Node&) = default;
-
-    // This silly massaging is required to appease the devilish MSVC
-    // clang will simply compile this without any enable_if.
-    template <typename T,
-        typename = std::enable_if_t<detail::isVariantType<std::decay_t<T>, Variant>::value>>
-    explicit Node(T&& arg)
-        : data_(std::forward<T>(arg))
-    {
-    }
 
     template <typename T>
     bool is() const
@@ -69,24 +56,71 @@ public:
         return std::holds_alternative<T>(data_);
     }
 
-    template <typename T>
-    struct AsReturn {
-        using Type = const T&;
-    };
+    bool isValid() const { return !is<Invalid>(); }
+    bool isNull() const { return is<Null>(); }
+    bool isString() const { return is<String>(); }
+    bool isBool() const { return is<Bool>(); }
+    bool isInteger() const { return is<Integer>(); }
+    bool isFloat() const { return is<Float>() || is<Integer>(); }
+    bool isArray() const { return is<Array>(); }
+    bool isDictionary() const { return is<Dictionary>(); }
+
+    operator bool() const { return isValid(); }
 
     template <typename T>
-    typename AsReturn<T>::Type as() const
+    const T& as() const
     {
         return std::get<T>(data_);
     }
 
-private:
-    Variant data_;
-};
+    const String& asString() const { return as<String>(); }
+    const Bool& asBool() const { return as<Bool>(); }
+    const Integer& asInteger() const { return as<Integer>(); }
+    const Float& asFloat() const { return as<Float>(); }
+    const Array& asArray() const { return as<Array>(); }
+    const Dictionary& asDictionary() const { return as<Dictionary>(); }
 
-template <>
-struct Node::AsReturn<Node::Float> {
-    using Type = Float;
+    size_t size() const
+    {
+        if (isInteger() || isFloat() || isString() || isBool()) {
+            return 1;
+        } else if (isArray()) {
+            return asArray().size();
+        } else if (isDictionary()) {
+            return asDictionary().size();
+        } else {
+            return 0;
+        }
+    }
+
+    const Node& operator[](std::string_view key) const
+    {
+        if (isDictionary()) {
+            for (const auto& [k, v] : asDictionary()) {
+                if (k == key) {
+                    return v;
+                }
+            }
+        }
+        return getInvalidNode();
+    }
+
+    const Node& operator[](size_t idx) const
+    {
+        if (isArray() && idx < asArray().size()) {
+            return asArray()[idx];
+        }
+        return getInvalidNode();
+    }
+
+private:
+    static const Node& getInvalidNode()
+    {
+        static Node node;
+        return node;
+    }
+
+    std::variant<Invalid, Null, String, Bool, Integer, Float, Array, Dictionary> data_;
 };
 
 struct Position {
@@ -127,37 +161,21 @@ struct ParseResult {
     std::variant<T, ParseError> result;
 
     template <typename U>
-    ParseResult(U&& arg)
-        : result(std::forward<U>(arg))
+    ParseResult(U&& arg) : result(std::forward<U>(arg))
     {
     }
 
     ParseResult(ParseResult&&) = default;
 
-    explicit operator bool() const
-    {
-        return std::holds_alternative<T>(result);
-    }
+    explicit operator bool() const { return std::holds_alternative<T>(result); }
 
-    const ParseError& error() const
-    {
-        return std::get<ParseError>(result);
-    }
+    const ParseError& error() const { return std::get<ParseError>(result); }
 
-    ParseError& error()
-    {
-        return std::get<ParseError>(result);
-    }
+    ParseError& error() { return std::get<ParseError>(result); }
 
-    const T& operator*() const
-    {
-        return std::get<T>(result);
-    }
+    const T& operator*() const { return std::get<T>(result); }
 
-    T& operator*()
-    {
-        return std::get<T>(result);
-    }
+    T& operator*() { return std::get<T>(result); }
 };
 
 std::string getContextString(std::string_view str, const Position& position);
